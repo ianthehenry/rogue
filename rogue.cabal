@@ -1,0 +1,18 @@
+name:                rogue
+version:             0.1.0.0
+license-file:        LICENSE
+author:              Ian Henry
+maintainer:          ianthehenry@gmail.com
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable rogue
+  main-is:             Main.hs
+  ghc-options:         -threaded
+  default-extensions:  NoImplicitPrelude
+  build-depends:       base ==4.*, base-prelude
+                     , array
+                     , vty, data-default
+                     , random
+
+  default-language:    Haskell2010

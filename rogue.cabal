@@ -9,9 +9,10 @@ cabal-version:       >=1.10
 executable rogue
   main-is:             Main.hs
   ghc-options:         -threaded
-  default-extensions:  NoImplicitPrelude
+  default-extensions:  NoImplicitPrelude, TupleSections
   build-depends:       base ==4.*, base-prelude
                      , array
+                     , mtl
                      , vty, data-default
                      , random
 

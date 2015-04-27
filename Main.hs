@@ -90,15 +90,32 @@ performCommand (Move dir) world@World { player = Player pos } =
   world { player = Player (move dir pos) }
 
 drawWorld :: Rect -> World -> Vty.Picture
-drawWorld rect@(left, top, width, height) world = Vty.picForLayers [info, playerImage, mapImage]
+drawWorld rect@(left, top, width, height) world = Vty.picForLayers [infoImage, playerImage, mapImage]
   where
-    info = Vty.string Vty.defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
+    infoImage = Vty.string Vty.defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
     playerImage = let (x, y) = globalToLocal rect playerPosition in Vty.translate x y (Vty.char Vty.defAttr '@')
     mapImage = drawMap (rect, map) shadowMap
 
     map = worldMap world
     playerPosition = (playerCoord . player) world
-    shadowMap = translateShadowMap (fieldOfView map playerPosition 25, playerPosition) rect
+
+    obstructionMap = makeObstructionMap playerPosition 25 map
+    shadowMap = translateShadowMap (fieldOfView obstructionMap, playerPosition) rect
+
+opacity :: Tile -> Opacity
+opacity Rock = Opaque
+opacity Tree = Opaque
+opacity _ = Transparent
+
+makeObstructionMap :: Coord -> Int -> Map -> ObstructionMap
+makeObstructionMap center viewDistance map = array bounds' obstructions
+  where
+    bounds' = ((-viewDistance, -viewDistance), (viewDistance, viewDistance))
+    obstructions = do
+      local <- range bounds'
+      let global = localToGlobal local
+      return (local, maybe Opaque opacity (lookup global map))
+    localToGlobal = addPoint center
 
 globalToLocal :: Rect -> Coord -> Coord
 globalToLocal (left, top, _, _) (x, y) = (x - left, y - top)

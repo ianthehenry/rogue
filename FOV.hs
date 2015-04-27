@@ -1,9 +1,9 @@
 module FOV
 ( fieldOfView
 , ShadowMap
+, ObstructionMap
 , Visibility(..)
 , Opacity(..)
-, opacity
 ) where
 
 import BasePrelude hiding (map, lookup)
@@ -21,11 +21,6 @@ type ObstructionMap = Array Coord Opacity
 
 data Visibility = Visible | Hidden deriving (Eq, Show)
 data Opacity = Transparent | Opaque deriving (Eq)
-
-opacity :: Tile -> Opacity
-opacity Rock = Opaque
-opacity Tree = Opaque
-opacity _ = Transparent
 
 lookup :: Ix i => i -> Array i e -> Maybe e
 lookup i a | inRange (bounds a) i = Just (a ! i)
@@ -46,20 +41,17 @@ octants = do
   minorSign <- [1, -1]
   return (along axis majorSign, along (otherAxis axis) minorSign)
 
-fieldOfView :: Map -> Coord -> Int -> ShadowMap
-fieldOfView map (centerX, centerY) squadius = execState runOctants initialShadowMap
+-- The bounds of obstructionMap must be a square centered at 0,0 with an odd
+-- length side, or everything will crash. So, like, ((-10, -10), (10, 10)) is
+-- a valid bounds choice.
+fieldOfView :: ObstructionMap -> ShadowMap
+fieldOfView obstructionMap = execState runOctants initialShadowMap
   where
+    mapBounds = bounds obstructionMap
+    (_, (squadius, _)) = mapBounds
     runOctants = forM_ octants runOctant
-    runOctant octant = runReaderT (scan 1 0 1) (argsFor octant)
-    argsFor = (obstructionMap, squadius,)
-    bounds = ((-squadius, -squadius), (squadius, squadius))
-    initialShadowMap = listArray bounds (repeat Hidden)
-    obstructionMap = array bounds obstructions
-    obstructions = do
-      local <- range bounds
-      let global = localToGlobal local
-      return (local, maybe Opaque opacity (lookup global map))
-    localToGlobal (x, y) = (x + centerX, y + centerY)
+    runOctant octant = runReaderT (scan 1 0 1) (obstructionMap, squadius, octant)
+    initialShadowMap = listArray mapBounds (repeat Hidden)
 
 glueA2 :: Applicative f => (a -> b -> f c) -> (a -> b -> f d) -> (a -> b -> f d)
 glueA2 a1 a2 x y = (a1 x y) *> (a2 x y)

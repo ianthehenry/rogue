@@ -16,12 +16,7 @@ data World = World { player :: Player
                    , worldMap :: Map
                    } deriving (Show, Eq)
 
-data Tile = EmptySpace
-          | Rock
-          | Grass
-          | TallGrass
-          | OtherGrass
-          deriving (Show, Eq, Enum, Bounded)
+data Tile = Grass | Tree | Rock deriving (Show, Eq)
 
 data Action = ActionCommand Command
             | ActionQuit
@@ -48,8 +43,12 @@ randomMap = do
   return (listArray geoRange pieces)
   where
     randomPiece :: IO Tile
-    randomPiece = toEnum <$> randomRIO (fromEnum min, fromEnum max)
-    (min, max) = (minBound, maxBound) :: (Tile, Tile)
+    randomPiece = toTile <$> randomRIO (0, 50)
+    toTile :: Int -> Tile
+    toTile 0 = Rock
+    toTile 1 = Tree
+    toTile 2 = Tree
+    toTile _ = Grass
 
 play :: Vty -> World -> IO ()
 play vty world = do
@@ -85,7 +84,7 @@ parseEvent _ = Nothing
 canPerformCommand :: Command -> World -> Bool
 canPerformCommand (Move dir) world =
   inRange (bounds (worldMap world)) destination &&
-  (worldMap world) ! destination /= Rock
+  opacity ((worldMap world) ! destination) == Transparent
   where destination = move dir (playerCoord (player world))
 
 type ShadowMap = Array Coord Visibility
@@ -99,9 +98,10 @@ type ScanInfo = (ObstructionMap, Int, (Delta, Delta))
 type Scanning = ReaderT ScanInfo (State ShadowMap)
 type Slope = Rational
 
-isObstruction :: Tile -> Opacity
-isObstruction Rock = Opaque
-isObstruction _ = Transparent
+opacity :: Tile -> Opacity
+opacity Rock = Opaque
+opacity Tree = Opaque
+opacity _ = Transparent
 
 lookup :: Ix i => i -> Array i e -> Maybe e
 lookup i a | inRange (bounds a) i = Just (a ! i)
@@ -122,14 +122,13 @@ fieldOfView map (centerX, centerY) squadius = execState runOctants initialShadow
     southWest = ((-1, 0), (0, 1))
     westSouth = ((0, 1), (-1, 0))
     westNorth = ((0, -1), (-1, 0))
-
     bounds = ((-squadius, -squadius), (squadius, squadius))
     initialShadowMap = listArray bounds (repeat Hidden)
     obstructionMap = array bounds obstructions
     obstructions = do
       local <- range bounds
       let global = localToGlobal local
-      return (local, maybe Opaque isObstruction (lookup global map))
+      return (local, maybe Opaque opacity (lookup global map))
     localToGlobal (x, y) = (x + centerX, y + centerY)
 
 glueA2 :: Applicative f => (a -> b -> f c) -> (a -> b -> f d) -> (a -> b -> f d)
@@ -212,7 +211,7 @@ drawWorld rect@(left, top, width, height) world = Vty.picForLayers [info, player
 
     map = worldMap world
     playerPosition = (playerCoord . player) world
-    shadowMap = translateShadowMap (fieldOfView map playerPosition 10, playerPosition) rect
+    shadowMap = translateShadowMap (fieldOfView map playerPosition 25, playerPosition) rect
 
 globalToLocal :: Rect -> Coord -> Coord
 globalToLocal (left, top, _, _) (x, y) = (x - left, y - top)
@@ -256,11 +255,9 @@ squareCenteredAt :: (Int, Int) -> Int -> Rect
 squareCenteredAt (x, y) squadius = (x - squadius, y - squadius, 2 * squadius + 1, 2 * squadius + 1)
 
 charForTile :: Tile -> Char
-charForTile EmptySpace = '.'
-charForTile Rock = '▮'
-charForTile Grass = ','
-charForTile TallGrass = '\''
-charForTile OtherGrass = '`'
+charForTile Rock = '#'
+charForTile Tree = '♣'
+charForTile Grass = '.'
 
 drawMap :: MapSegment -> ShadowMap -> Vty.Image
 drawMap segment@((_, _, width, height), map) shadowMap = Vty.vertCat (row <$> (range (0, height)))
@@ -268,5 +265,5 @@ drawMap segment@((_, _, width, height), map) shadowMap = Vty.vertCat (row <$> (r
     row y = Vty.horizCat (imageAt <$> range ((0, y), (width, y)))
     imageAt coord | isVisible coord = Vty.char Vty.defAttr (charAt coord)
                   | otherwise = Vty.char Vty.defAttr ' '
-    charAt coord = maybe '~' charForTile (lookupTile coord segment)
+    charAt coord = maybe '^' charForTile (lookupTile coord segment)
     isVisible coord = inRange (bounds shadowMap) coord && (shadowMap ! coord) == Visible

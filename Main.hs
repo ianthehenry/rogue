@@ -94,13 +94,24 @@ drawWorld rect@(left, top, width, height) world = Vty.picForLayers [infoImage, p
   where
     infoImage = Vty.string Vty.defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
     playerImage = let (x, y) = globalToLocal rect playerPosition in Vty.translate x y (Vty.char Vty.defAttr '@')
-    mapImage = drawMap (rect, map) shadowMap
+    mapImage = drawMap (rect, map) translatedShadowMap
 
     map = worldMap world
     playerPosition = (playerCoord . player) world
 
     obstructionMap = makeObstructionMap playerPosition 25 map
-    shadowMap = translateShadowMap (fieldOfView obstructionMap, playerPosition) rect
+    shadowMap = fieldOfView obstructionMap
+    clampedShadowMap = mapArray (clampCircle 25) shadowMap
+    translatedShadowMap = translateShadowMap (clampedShadowMap, playerPosition) rect
+
+clampCircle ::Int -> Coord -> Visibility -> Visibility
+clampCircle _ _ Hidden = Hidden
+clampCircle radius (x, y) Visible
+  | (x * x + y * y) > (radius * radius) = Hidden
+  | otherwise = Visible
+
+mapArray :: Ix i => (i -> a -> b) -> Array i a -> Array i b
+mapArray f a = (listArray (bounds a) . fmap (uncurry f) . assocs) a
 
 opacity :: Tile -> Opacity
 opacity Rock = Opaque

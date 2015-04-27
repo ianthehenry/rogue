@@ -107,21 +107,27 @@ lookup :: Ix i => i -> Array i e -> Maybe e
 lookup i a | inRange (bounds a) i = Just (a ! i)
            | otherwise = Nothing
 
+data Axis = X | Y
+otherAxis X = Y
+otherAxis Y = X
+
+along :: Axis -> Int -> Delta
+along X i = (i, 0)
+along Y i = (0, i)
+
+octants :: [(Delta, Delta)]
+octants = do
+  axis <- [X, Y]
+  majorSign <- [1, -1]
+  minorSign <- [1, -1]
+  return (along axis majorSign, along (otherAxis axis) minorSign)
+
 fieldOfView :: Map -> Coord -> Int -> ShadowMap
 fieldOfView map (centerX, centerY) squadius = execState runOctants initialShadowMap
   where
     runOctants = forM_ octants runOctant
     runOctant octant = runReaderT (scan 1 0 1) (argsFor octant)
     argsFor = (obstructionMap, squadius,)
-    octants = [northWest, northEast, eastNorth, eastSouth, southEast, southWest, westSouth, westNorth]
-    northWest = ((-1, 0), (0, -1))
-    northEast = ((1, 0), (0, -1))
-    eastNorth = ((0, -1), (1, 0))
-    eastSouth = ((0, 1), (1, 0))
-    southEast = ((1, 0), (0, 1))
-    southWest = ((-1, 0), (0, 1))
-    westSouth = ((0, 1), (-1, 0))
-    westNorth = ((0, -1), (-1, 0))
     bounds = ((-squadius, -squadius), (squadius, squadius))
     initialShadowMap = listArray bounds (repeat Hidden)
     obstructionMap = array bounds obstructions

@@ -93,7 +93,8 @@ drawWorld :: Rect -> World -> Vty.Picture
 drawWorld rect@(left, top, width, height) world = Vty.picForLayers [infoImage, playerImage, mapImage]
   where
     infoImage = Vty.string Vty.defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
-    playerImage = let (x, y) = globalToLocal rect playerPosition in Vty.translate x y (Vty.char Vty.defAttr '@')
+    playerImage = Vty.translate (x * 2 + 1) y (Vty.char Vty.defAttr '@')
+      where (x, y) = globalToLocal rect playerPosition
     mapImage = drawMap (rect, map) translatedShadowMap
 
     map = worldMap world
@@ -157,9 +158,9 @@ lookupTile (x, y) ((left, top, width, height), map)
 
 updateDisplay :: Vty -> World -> IO ()
 updateDisplay vty world = do
-  displaySize <- Vty.displayBounds (Vty.outputIface vty)
+  (width, height) <- Vty.displayBounds (Vty.outputIface vty)
   let playerPosition = (playerCoord . player) world
-  let viewport = rectCenteredAt playerPosition displaySize
+  let viewport = rectCenteredAt playerPosition (width `div` 2, height)
   let picture = drawWorld viewport world
   Vty.update vty picture
 
@@ -175,9 +176,10 @@ charForTile Tree = '♣'
 charForTile Grass = '.'
 
 drawMap :: MapSegment -> ShadowMap -> Vty.Image
-drawMap segment@((_, _, width, height), map) shadowMap = Vty.vertCat (row <$> (range (0, height)))
+drawMap segment@((_, _, width, height), map) shadowMap = (Vty.vertCat . fmap rowImage) (range (0, height))
   where
-    row y = Vty.horizCat (imageAt <$> range ((0, y), (width, y)))
+    rowImage y = (Vty.horizCat . fmap (Vty.translateX 1 . imageAt)) row
+      where row = range ((0, y), (width, y))
     imageAt coord | isVisible coord = Vty.char Vty.defAttr (charAt coord)
                   | otherwise = Vty.char Vty.defAttr ' '
     charAt coord = maybe '^' charForTile (lookupTile coord segment)

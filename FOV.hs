@@ -89,11 +89,9 @@ scan distance initialStartSlope initialEndSlope = do
       where newEndSlope = slopeBetween deltas coord (before deltas coord)
 
     stepper deltas (startSlope, _) (Transparent, coord) = pure newStartSlope
-      where newStartSlope = slopeBetween deltas coord (afterPrevious deltas coord)
+      where newStartSlope = slopeBetween deltas coord (before deltas coord)
 
-    before, afterPrevious :: (Delta, Delta) -> Coord -> Coord
-    before (majorDelta, minorDelta) coord = (coord `addPoint` minorDelta) `subPoint` majorDelta
-    afterPrevious (majorDelta, minorDelta) coord = (coord `subPoint` majorDelta) `subPoint` minorDelta
+    before (majorDelta, minorDelta) coord = coord `subPoint` majorDelta
 
 -- We calculate slope as majorAxis/minorAxis.
 slopeBetween :: (Delta, Delta) -> Coord -> Coord -> Slope

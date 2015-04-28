@@ -50,7 +50,7 @@ fieldOfView obstructionMap = execState runOctants initialShadowMap
     mapBounds = bounds obstructionMap
     (_, (squadius, _)) = mapBounds
     runOctants = forM_ octants runOctant
-    runOctant octant = runReaderT (scan 1 0 1) (obstructionMap, squadius, octant)
+    runOctant octant = runReaderT (scan 0 0 1) (obstructionMap, squadius, octant)
     initialShadowMap = listArray mapBounds (repeat Hidden)
 
 glueA2 :: Applicative f => (a -> b -> f c) -> (a -> b -> f d) -> (a -> b -> f d)

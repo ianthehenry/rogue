@@ -168,7 +168,7 @@ squareCenteredAt (x, y) squadius = (x - squadius, y - squadius, 2 * squadius + 1
 charForTile :: Tile -> Char
 charForTile Rock = '#'
 charForTile Tree = '♣'
-charForTile Grass = '.'
+charForTile Grass = '·'
 
 drawMap :: MapSegment -> ShadowMap -> Vty.Image
 drawMap segment@((_, _, width, height), map) shadowMap = (Vty.vertCat . fmap rowImage) (range (0, height))

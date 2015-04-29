@@ -10,13 +10,7 @@ import Control.Monad.State (State, modify, execState, get)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Types
 import FOV
-
-data Player = Player { playerCoord :: Coord
-                     } deriving (Show, Eq)
-
-data World = World { player :: Player
-                   , worldMap :: Map
-                   } deriving (Show, Eq)
+import Control.Lens ((^.), over)
 
 data Action = ActionCommand Command
             | ActionQuit
@@ -77,17 +71,18 @@ parseEvent _ = Nothing
 
 canPerformCommand :: Command -> World -> Bool
 canPerformCommand (Move dir) world =
-  inRange (bounds (worldMap world)) destination &&
-  opacity ((worldMap world) ! destination) == Transparent
-  where destination = move dir (playerCoord (player world))
+  inRange (bounds worldMap) destination &&
+  opacity (worldMap ! destination) == Transparent
+  where
+    worldMap = world ^. map
+    destination = move dir (world ^. player.location)
 
 lookup :: Ix i => i -> Array i e -> Maybe e
 lookup i a | inRange (bounds a) i = Just (a ! i)
            | otherwise = Nothing
 
 performCommand :: Command -> World -> World
-performCommand (Move dir) world@World { player = Player pos } =
-  world { player = Player (move dir pos) }
+performCommand (Move dir) = over (player.location) (move dir)
 
 drawWorld :: Rect -> World -> Vty.Picture
 drawWorld rect@(left, top, width, height) world = Vty.picForLayers [infoImage, playerImage, mapImage]
@@ -95,12 +90,12 @@ drawWorld rect@(left, top, width, height) world = Vty.picForLayers [infoImage, p
     infoImage = Vty.string Vty.defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
     playerImage = Vty.translate (x * 2 + 1) y (Vty.char Vty.defAttr '@')
       where (x, y) = globalToLocal rect playerPosition
-    mapImage = drawMap (rect, map) translatedShadowMap
+    mapImage = drawMap (rect, worldMap) translatedShadowMap
 
-    map = worldMap world
-    playerPosition = (playerCoord . player) world
+    worldMap = world ^. map
+    playerPosition = world ^. player.location
 
-    obstructionMap = makeObstructionMap playerPosition 25 map
+    obstructionMap = makeObstructionMap playerPosition 25 worldMap
     shadowMap = fieldOfView obstructionMap
     clampedShadowMap = mapArray (clampCircle 25) shadowMap
     translatedShadowMap = translateShadowMap (clampedShadowMap, playerPosition) rect
@@ -159,7 +154,7 @@ lookupTile (x, y) ((left, top, width, height), map)
 updateDisplay :: Vty -> World -> IO ()
 updateDisplay vty world = do
   (width, height) <- Vty.displayBounds (Vty.outputIface vty)
-  let playerPosition = (playerCoord . player) world
+  let playerPosition = world ^. player.location
   let viewport = rectCenteredAt playerPosition (width `div` 2, height)
   let picture = drawWorld viewport world
   Vty.update vty picture

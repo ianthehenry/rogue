@@ -15,5 +15,6 @@ executable rogue
                      , mtl
                      , vty, data-default
                      , random
+                     , lens
 
   default-language:    Haskell2010

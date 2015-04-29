@@ -9,11 +9,11 @@ module FOV
 import BasePrelude hiding (map, lookup)
 import Types
 import Data.Array
-import Control.Monad.State (State, modify, execState, get)
+import Control.Monad.Writer (Writer, tell, execWriter)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 
 type ScanInfo = (ObstructionMap, Int, (Delta, Delta))
-type Scanning = ReaderT ScanInfo (State ShadowMap)
+type Scanning = ReaderT ScanInfo (Writer (Dual [Coord]))
 type Slope = Rational
 
 type ShadowMap = Array Coord Visibility
@@ -45,8 +45,9 @@ octants = do
 -- length side, or everything will crash. So, like, ((-10, -10), (10, 10)) is
 -- a valid bounds choice.
 fieldOfView :: ObstructionMap -> ShadowMap
-fieldOfView obstructionMap = execState runOctants initialShadowMap
+fieldOfView obstructionMap = initialShadowMap // fmap (, Visible) visibleCoords
   where
+    visibleCoords = getDual (execWriter runOctants)
     mapBounds = bounds obstructionMap
     (_, (squadius, _)) = mapBounds
     runOctants = forM_ octants runOctant
@@ -77,7 +78,7 @@ scan distance initialStartSlope initialEndSlope = do
     when (last == Just Transparent) (scan (distance + 1) newStartSlope initialEndSlope)
   where
     reveal :: ScanFolding ()
-    reveal (_, _) (_, coord) = modify (// [(coord, Visible)])
+    reveal (_, _) (_, coord) = tell (Dual [coord])
     preserving :: ScanFolding Slope -> ScanFolding (Slope, Maybe Opacity)
     preserving a1 args args2@(opacity, _) = (, Just opacity) <$> (a1 args args2)
 

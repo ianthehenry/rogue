@@ -32,12 +32,12 @@ main = do
 
 randomMap :: IO Map
 randomMap = do
-  let geoRange = ((0, 0), (79, 79))
+  let geoRange = ((0, 0), (100, 100))
   pieces <- replicateM (rangeSize geoRange) randomPiece
   return (listArray geoRange pieces)
   where
     randomPiece :: IO Tile
-    randomPiece = toTile <$> randomRIO (0, 50)
+    randomPiece = toTile <$> randomRIO (0, 100)
     toTile :: Int -> Tile
     toTile 0 = Rock
     toTile 1 = Tree

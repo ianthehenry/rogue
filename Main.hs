@@ -88,7 +88,7 @@ drawWorld :: Rect -> World -> Vty.Picture
 drawWorld rect@(left, top, width, height) world = Vty.picForLayers [infoImage, playerImage, mapImage]
   where
     infoImage = Vty.string Vty.defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
-    playerImage = Vty.translate (x * 2 + 1) y (Vty.char Vty.defAttr '@')
+    playerImage = Vty.translate x y (Vty.char Vty.defAttr '@')
       where (x, y) = globalToLocal rect playerPosition
     mapImage = drawMap (rect, worldMap) localShadowMap
     localShadowMap = translateShadowMap (-left, -top) globalShadowMap
@@ -176,7 +176,7 @@ charForTile Grass = '·'
 drawMap :: MapSegment -> ShadowMap -> Vty.Image
 drawMap segment@((_, _, width, height), map) shadowMap = (Vty.vertCat . fmap rowImage) (range (0, height))
   where
-    rowImage y = (Vty.horizCat . fmap (Vty.translateX 1 . imageAt)) row
+    rowImage y = (Vty.horizCat . fmap (Vty.translateX 0 . imageAt)) row
       where row = range ((0, y), (width, y))
     imageAt coord | isVisible coord = Vty.char Vty.defAttr (charAt coord)
                   | otherwise = Vty.char Vty.defAttr ' '

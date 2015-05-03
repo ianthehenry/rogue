@@ -26,10 +26,10 @@ main = do
 
 randomMap :: IO Map
 randomMap = do
-  let geoRange = ((0, 0), (100, 100))
-  pieces <- replicateM (rangeSize geoRange) randomPiece
-  return (listArray geoRange pieces)
+  pieces <- replicateM (rangeSize mapBounds) randomPiece
+  return (listArray mapBounds pieces)
   where
+    mapBounds = ((0, 0), (1000, 1000))
     randomPiece :: IO Tile
     randomPiece = toTile <$> randomRIO (0, 100)
     toTile :: Int -> Tile

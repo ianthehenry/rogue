@@ -19,6 +19,7 @@ type Rect = (Int, Int, Int, Int)
 data Tile = Grass | Tree | Rock deriving (Show, Eq)
 
 data Player = Player { _playerLocation :: Coord
+                     , _playerSightRadius :: Int
                      } deriving (Show, Eq)
 $(makeFields ''Player)
 

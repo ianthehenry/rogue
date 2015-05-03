@@ -90,17 +90,22 @@ drawWorld rect@(left, top, width, height) world = Vty.picForLayers [infoImage, p
     infoImage = Vty.string Vty.defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
     playerImage = Vty.translate (x * 2 + 1) y (Vty.char Vty.defAttr '@')
       where (x, y) = globalToLocal rect playerPosition
-    mapImage = drawMap (rect, worldMap) translatedShadowMap
-
+    mapImage = drawMap (rect, worldMap) localShadowMap
+    localShadowMap = translateShadowMap (-left, -top) globalShadowMap
+    globalShadowMap = makeShadowMap (world ^. player) worldMap
     worldMap = world ^. map
     playerPosition = world ^. player.location
 
-    obstructionMap = makeObstructionMap playerPosition 25 worldMap
+makeShadowMap :: Player -> Map -> ShadowMap
+makeShadowMap player map = translateShadowMap playerPosition clampedShadowMap
+  where
+    playerPosition = player ^. location
+    viewDistance = player ^. sightRadius
+    obstructionMap = makeObstructionMap playerPosition viewDistance map
     shadowMap = fieldOfView obstructionMap
-    clampedShadowMap = mapArray (clampCircle 25) shadowMap
-    translatedShadowMap = translateShadowMap (clampedShadowMap, playerPosition) rect
+    clampedShadowMap = mapArray (clampCircle viewDistance) shadowMap
 
-clampCircle ::Int -> Coord -> Visibility -> Visibility
+clampCircle :: Int -> Coord -> Visibility -> Visibility
 clampCircle _ _ Hidden = Hidden
 clampCircle radius (x, y) Visible
   | (x * x + y * y) > (radius * radius) = Hidden
@@ -127,17 +132,15 @@ makeObstructionMap center viewDistance map = array bounds' obstructions
 globalToLocal :: Rect -> Coord -> Coord
 globalToLocal (left, top, _, _) (x, y) = (x - left, y - top)
 
-translateShadowMap :: (ShadowMap, Coord) -> Rect -> ShadowMap
-translateShadowMap (shadowMap, shadowMapCenter) (left, top, _, _) =
-  ixmap newBounds unoffset shadowMap
+translateShadowMap :: Coord -> ShadowMap -> ShadowMap
+translateShadowMap delta shadowMap = ixmap newBounds unoffset shadowMap
   where
-    newBounds@(newStart, _) = (offset prevStart, offset prevEnd)
-    offset = addPoint (x - left, y - top)
+    newBounds = mapBoth offset (bounds shadowMap)
+    offset = addPoint delta
+    unoffset = (`subPoint` delta)
 
-    deltaStart = prevStart `subPoint` newStart
-    (prevStart, prevEnd) = bounds shadowMap
-    unoffset = addPoint deltaStart
-    (x, y) = shadowMapCenter
+mapBoth :: (a -> b) -> (a, a) -> (b, b)
+mapBoth f (x, y) = (f x, f y)
 
 type MapSegment = (Rect, Map)
 

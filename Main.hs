@@ -21,7 +21,7 @@ main :: IO ()
 main = do
   vty <- mkVty def
   map <- randomMap
-  play vty (World (Player (5, 5) 25) map)
+  play vty (World (Player (5, 5) 25) map 0)
   Vty.shutdown vty
 
 randomMap :: IO Map
@@ -47,10 +47,13 @@ play vty world = do
     Just action -> case action of
       ActionQuit -> return ()
       ActionCommand c -> if canPerformCommand c world then
-        play vty (performCommand c world)
+        play vty ((tick . performCommand c) world)
       else
         again
   where again = play vty world
+
+tick :: World -> World
+tick = over turn succ 
 
 move :: Direction -> Coord -> Coord
 move North (x, y) = (x, y - 1)

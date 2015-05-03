@@ -25,6 +25,7 @@ $(makeFields ''Player)
 
 data World = World { _worldPlayer :: Player
                    , _worldMap :: Map
+                   , _worldTurn :: Int
                    } deriving (Show, Eq)
 $(makeFields ''World)
 

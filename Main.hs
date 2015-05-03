@@ -20,8 +20,8 @@ data Command = Move Direction
 main :: IO ()
 main = do
   vty <- mkVty def
-  world <- World (Player (5, 5)) <$> randomMap
-  play vty world
+  map <- randomMap
+  play vty (World (Player (5, 5) 25) map)
   Vty.shutdown vty
 
 randomMap :: IO Map

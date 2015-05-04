@@ -20,6 +20,8 @@ data Tile = Grass | Tree | Rock deriving (Show, Eq)
 
 data Player = Player { _playerLocation :: Coord
                      , _playerSightRadius :: Int
+                     , _playerHunger :: Int
+                     , _playerFatigue :: Int
                      } deriving (Show, Eq)
 $(makeFields ''Player)
 

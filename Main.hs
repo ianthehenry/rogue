@@ -21,7 +21,7 @@ main :: IO ()
 main = do
   vty <- mkVty def
   map <- randomMap
-  play vty (World (Player (5, 5) 25) map 0)
+  play vty (World (Player (5, 5) 25 0 0) map 0)
   Vty.shutdown vty
 
 randomMap :: IO Map
@@ -53,7 +53,10 @@ play vty world = do
   where again = play vty world
 
 tick :: World -> World
-tick = over turn succ 
+tick = over player tickPlayer . over turn succ
+
+tickPlayer :: Player -> Player
+tickPlayer = over hunger succ . over fatigue succ
 
 move :: Direction -> Coord -> Coord
 move North (x, y) = (x, y - 1)
@@ -87,8 +90,8 @@ lookup i a | inRange (bounds a) i = Just (a ! i)
 performCommand :: Command -> World -> World
 performCommand (Move dir) = over (player.location) (move dir)
 
-drawWorld :: Rect -> World -> Vty.Picture
-drawWorld rect@(left, top, width, height) world = Vty.picForLayers [infoImage, playerImage, mapImage]
+drawWorld :: Rect -> World -> [Vty.Image]
+drawWorld rect@(left, top, width, height) world = [infoImage, playerImage, mapImage]
   where
     infoImage = Vty.string Vty.defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
     playerImage = Vty.translate x y (Vty.char Vty.defAttr '@')
@@ -157,13 +160,70 @@ lookupTile (x, y) ((left, top, width, height), map)
   where
     globalPoint = (x + left, y + top)
 
+type Size = (Int, Int)
+
+messageLog :: Player -> Size -> Vty.Image
+messageLog _ (width, height) = Vty.emptyImage
+
+twoDigit :: Int -> String
+twoDigit n
+  | n < 10 = '0':d
+  | n > 99 = undefined
+  | otherwise = d
+  where d = show n
+
+worldInfo :: World -> Size -> Vty.Image
+worldInfo world _ = Vty.string Vty.defAttr time
+  where
+    ticks = world ^. turn
+    time = hour <> ":" <> minute <> " " <> meridiem
+    minutes = ticks `div` 6
+    minute = twoDigit (minutes `mod` 60)
+    hours = minutes `div` 60
+
+    hour = (twoDigit . zeroToTwelve) (hours `mod` 12)
+    zeroToTwelve 0 = 12
+    zeroToTwelve x = x
+    meridiem = if (hours `mod` 24) < 12 then "AM" else "PM"
+
+playerInfo :: Player -> Size -> Vty.Image
+playerInfo player (width, height) = Vty.vertCat (fmap showStat stats)
+  where
+    showStat (name, lens) = Vty.string Vty.defAttr (name <> ": " <> show (player ^. lens))
+    stats = [("Hunger", hunger), ("Fatigue", fatigue)]
+
+stack :: [(Size -> Vty.Image)] -> Size -> Vty.Image
+stack fs (totalWidth, totalHeight)
+  | heightEach <= 0 = undefined
+  | otherwise = Vty.vertCat (intersperse border components)
+  where
+    border = Vty.charFill Vty.defAttr '-' totalWidth 1
+    components = fmap ($ sizeEach) fs
+    borders = (length fs) - 1
+    heightEach = (totalHeight - borders) `div` (length fs)
+    sizeEach = (totalWidth, heightEach)
+
+translateLayers :: Int -> Int -> Vty.Picture -> [Vty.Image]
+translateLayers x y Vty.Picture { Vty.picLayers = layers } = (Vty.translate x y) <$> layers
+
 updateDisplay :: Vty -> World -> IO ()
 updateDisplay vty world = do
-  (width, height) <- Vty.displayBounds (Vty.outputIface vty)
-  let playerPosition = world ^. player.location
-  let viewport = rectCenteredAt playerPosition (width `div` 2, height)
-  let picture = drawWorld viewport world
+  (screenWidth, screenHeight) <- Vty.displayBounds (Vty.outputIface vty)
+  let mapWidth = max 40 (screenWidth `div` 2)
+  let menuWidth = screenWidth - mapWidth - borderWidth
+  let viewport = rectCenteredAt playerPosition (mapWidth, screenHeight)
+
+  let menu = makeMenu (menuWidth, screenHeight)
+  let border = Vty.charFill Vty.defAttr '|' borderWidth screenHeight
+  let menuImage = Vty.horizCat [menu, border]
+  let mapLayers = (Vty.translate (menuWidth + borderWidth) 0) <$> drawWorld viewport world
+  let picture = Vty.picForLayers (menuImage:mapLayers)
   Vty.update vty picture
+  where
+    you = world ^. player
+    borderWidth = 1
+    playerPosition = you ^. location
+    makeMenu = stack [worldInfo world, playerInfo you, messageLog you]
 
 rectCenteredAt :: (Int, Int) -> (Int, Int) -> Rect
 rectCenteredAt (x, y) (width, height) = (x - width `div` 2, y - height `div` 2, width, height)

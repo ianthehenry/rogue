@@ -10,7 +10,7 @@ import Control.Monad.State (State, modify, execState, get)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 import Types
 import FOV
-import Control.Lens ((^.), over)
+import Control.Lens ((^.), over, to)
 
 data Action = ActionCommand Command
             | ActionQuit
@@ -186,11 +186,47 @@ worldInfo world _ = Vty.string Vty.defAttr time
     zeroToTwelve x = x
     meridiem = if (hours `mod` 24) < 12 then "AM" else "PM"
 
-playerInfo :: Player -> Size -> Vty.Image
-playerInfo player (width, height) = Vty.vertCat (fmap showStat stats)
+data HungerInterpretation = Full | Fine | Peckish | Hungry | Starving | Ravenous deriving (Show)
+
+interpretHunger :: Int -> HungerInterpretation
+interpretHunger n
+  | n > hours 24 = Ravenous
+  | n > hours 16 = Starving
+  | n > hours 8  = Hungry
+  | n > hours 4  = Peckish 
+  | n > 6 * 30   = Fine
+  | otherwise    = Full
   where
-    showStat (name, lens) = Vty.string Vty.defAttr (name <> ": " <> show (player ^. lens))
-    stats = [("Hunger", hunger), ("Fatigue", fatigue)]
+    hours = (6 * 60 *)
+
+data FatigueInterpretation = Spritely | Awake | Weary | Tired | Exhausted | BarelyAwake
+instance Show FatigueInterpretation where
+  show Spritely = "Spritely"
+  show Awake = "Awake"
+  show Weary = "Weary"
+  show Tired = "Tired"
+  show Exhausted = "Exhausted"
+  show BarelyAwake = "About to Drop"
+
+interpretFatigue :: Int -> FatigueInterpretation
+interpretFatigue n
+  | n > hours 24 = BarelyAwake
+  | n > hours 16 = Exhausted
+  | n > hours 14 = Tired
+  | n > hours 12 = Weary
+  | n > hours 1  = Awake
+  | otherwise    = Spritely
+  where
+    hours = (6 * 60 *)
+
+playerInfo :: Player -> Size -> Vty.Image
+playerInfo player (width, height) = Vty.vertCat $ fmap (Vty.string Vty.defAttr)
+  [ "Hunger: " <> (player ^. hungerString)
+  , "Fatigue: " <> (player ^. fatigueString)
+  ]
+  where
+    hungerString = hunger . to interpretHunger . to show
+    fatigueString = fatigue . to interpretFatigue . to show
 
 stack :: [(Size -> Vty.Image)] -> Size -> Vty.Image
 stack fs (totalWidth, totalHeight)

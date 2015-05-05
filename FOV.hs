@@ -6,9 +6,8 @@ module FOV
 , Opacity(..)
 ) where
 
-import BasePrelude hiding (map, lookup)
+import RoguePrelude
 import Types
-import Data.Array
 import Control.Monad.Writer (Writer, tell, execWriter)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 

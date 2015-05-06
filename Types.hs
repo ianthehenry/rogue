@@ -23,13 +23,22 @@ data Player = Player { _playerLocation :: Coord
                      , _playerSightRadius :: Int
                      , _playerHunger :: Int
                      , _playerFatigue :: Int
-                     } deriving (Show, Eq)
+                     }
 $(makeFields ''Player)
+
+data MobType = Zombie
+
+data Mob = Mob { _mobLocation :: Coord
+               , _mobHealth :: Int
+               , _mobSpecies :: MobType
+               }
+$(makeFields ''Mob)
 
 data World = World { _worldPlayer :: Player
                    , _worldMap :: Map
                    , _worldTurn :: Int
-                   } deriving (Show, Eq)
+                   , _worldMobs :: [Mob]
+                   }
 $(makeFields ''World)
 
 pointJoin :: (Int -> Int -> Int) -> Coord -> Delta -> Coord
@@ -63,3 +72,7 @@ lookup i a | inRange (bounds a) i = Just (a ! i)
 
 globalToLocal :: Rect -> Coord -> Coord
 globalToLocal (left, top, _, _) (x, y) = (x - left, y - top)
+
+contains :: Rect -> Coord -> Bool
+contains (left, top, width, height) (x, y) = inRange (left, left + width) x
+                                          && inRange (top, top + height) y

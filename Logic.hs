@@ -2,6 +2,7 @@ module Logic where
 
 import RoguePrelude
 import Types
+import Control.Monad.Random
 import Control.Lens ((^.), over)
 import FOV
 
@@ -40,13 +41,30 @@ interpretFatigue n
   where
     hours = (6 * 60 *)
 
-tick :: World -> World
-tick = over player tickPlayer
-     . over turn succ
+type Ticker = Rand StdGen
 
-tickPlayer :: Player -> Player
-tickPlayer = over hunger succ
-           . over fatigue succ
+tick :: World -> Ticker World
+tick =  pure . over turn succ
+    >=> player tickPlayer
+    >=> mobs (traverse wiggle)
+
+randomDirection :: Ticker Direction
+randomDirection = do
+  i <- getRandomR (0, 3 :: Int)
+  pure $ case i of
+    0 -> South
+    1 -> West
+    2 -> East
+    3 -> North
+
+wiggle :: Mob -> Ticker Mob
+wiggle mob = do
+  direction <- randomDirection
+  pure (over location (move direction) mob)
+
+tickPlayer :: Player -> Ticker Player
+tickPlayer =  pure . over hunger succ
+          >=> pure . over fatigue succ
 
 move :: Direction -> Coord -> Coord
 move North (x, y) = (x, y - 1)

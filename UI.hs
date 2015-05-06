@@ -1,9 +1,12 @@
+{-# LANGUAGE FlexibleContexts #-}
+
 module UI (play) where
 
 import Graphics.Vty
 import RoguePrelude
 import Types
 import Logic
+import Control.Monad.Random (evalRandIO)
 import FOV (Visibility(..), ShadowMap)
 import Control.Lens ((^.), to)
 
@@ -15,8 +18,9 @@ play vty world = do
     Nothing -> again
     Just action -> case action of
       ActionQuit -> return ()
-      ActionCommand c -> if canPerformCommand c world then
-        play vty ((tick . performCommand c) world)
+      ActionCommand c -> if canPerformCommand c world then do
+        newWorld <- evalRandIO (tick (performCommand c world))
+        play vty newWorld
       else
         again
   where again = play vty world
@@ -32,18 +36,40 @@ parseEvent _ = Nothing
 c :: Command -> Maybe Action
 c = Just . ActionCommand
 
-drawWorld :: Rect -> World -> [Image]
-drawWorld rect@(left, top, width, height) world = [infoImage, playerImage, mapImage]
+drawMob :: Mob -> Image
+drawMob _ = char defAttr 'Z'
+
+drawPlayer :: Player -> Image
+drawPlayer _ = char defAttr '@'
+
+positionImage :: HasLocation a Coord => Rect -> a -> Image -> Maybe Image
+positionImage rect thing image
+  | contains rect coord = Just (translate x y image)
+  | otherwise = Nothing
   where
-    infoImage = string defAttr ("Move with the arrows keys. Press q to exit. " ++ show playerPosition)
-    playerImage = translate x y (char defAttr '@')
-      where (x, y) = globalToLocal rect playerPosition
-    globalToLocal (left, top, _, _) (x, y) = (x - left, y - top)
-    mapImage = drawMap (rect, worldMap) localShadowMap
+    coord = thing ^. location
+    (x, y) = globalToLocal rect coord
+
+checkMap :: HasLocation a Coord => ShadowMap -> a -> Image -> Maybe Image
+checkMap shadowMap thing image
+  | (shadowMap ! coord) == Visible = Just image
+  | otherwise = Nothing
+  where coord = thing ^. location
+
+positionedThing :: HasLocation a Coord => Rect -> ShadowMap -> (a -> Image) -> a -> Maybe Image
+positionedThing rect shadowMap draw thing = do
+  positioned <- positionImage rect thing (draw thing)
+  checkMap shadowMap thing positioned
+
+drawWorld :: Rect -> World -> [Image]
+drawWorld rect@(left, top, width, height) world = catMaybes (playerImage:mobImages) <> [mapImage]
+  where
+    playerImage = positionedThing rect globalShadowMap drawPlayer (world ^. player)
+    mobImages = positionedThing rect globalShadowMap drawMob <$> (world ^. mobs)
+    mapImage = drawMap localShadowMap (rect, worldMap)
     localShadowMap = translateMap (-left, -top) globalShadowMap
     globalShadowMap = makeShadowMap (world ^. player) worldMap
     worldMap = world ^. map
-    playerPosition = world ^. player.location
 
 messageLog :: Player -> Size -> Image
 messageLog _ (width, height) = emptyImage
@@ -130,8 +156,8 @@ charForTile Rock = '#'
 charForTile Tree = '♣'
 charForTile Grass = '·'
 
-drawMap :: MapSegment -> ShadowMap -> Image
-drawMap segment@((_, _, width, height), map) shadowMap = (vertCat . fmap rowImage) (range (0, height))
+drawMap :: ShadowMap -> MapSegment -> Image
+drawMap shadowMap segment@((_, _, width, height), map) = (vertCat . fmap rowImage) (range (0, height))
   where
     rowImage y = (horizCat . fmap (translateX 0 . imageAt)) row
       where row = range ((0, y), (width, y))

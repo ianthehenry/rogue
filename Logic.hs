@@ -24,7 +24,7 @@ interpretHunger n
   | n > hours 24 = Ravenous
   | n > hours 16 = Starving
   | n > hours 8  = Hungry
-  | n > hours 4  = Peckish 
+  | n > hours 4  = Peckish
   | n > 6 * 30   = Fine
   | otherwise    = Full
   where

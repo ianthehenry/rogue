@@ -67,7 +67,7 @@ scan :: Int -> Slope -> Slope -> Scanning ()
 scan distance initialStartSlope initialEndSlope = do
   (obstructionMap, maxDistance, deltas@(majorDelta, minorDelta)) <- ask
   when (initialStartSlope <= initialEndSlope && distance <= maxDistance) $ do
-    let pointAt slope = pointScaleF (fromIntegral distance * slope) majorDelta 
+    let pointAt slope = pointScaleF (fromIntegral distance * slope) majorDelta
                         `addPoint`
                         pointScale distance minorDelta
     let spacesToLookAt = from majorDelta (pointAt initialStartSlope) (pointAt initialEndSlope)

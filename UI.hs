@@ -18,7 +18,7 @@ play vty world = do
     Nothing -> again
     Just action -> case action of
       ActionQuit -> return ()
-      ActionCommand c -> if canPerformCommand c world then do
+      ActionCommand c -> if canPerformCommand (world ^. player) c world then do
         newWorld <- evalRandIO (tick (performCommand c world))
         play vty newWorld
       else

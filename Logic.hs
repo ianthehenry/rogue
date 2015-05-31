@@ -72,13 +72,13 @@ move South (x, y) = (x, y + 1)
 move East  (x, y) = (x + 1, y)
 move West  (x, y) = (x - 1, y)
 
-canPerformCommand :: Command -> World -> Bool
-canPerformCommand (Move dir) world =
+canPerformCommand :: HasLocation a Coord => a -> Command -> World -> Bool
+canPerformCommand actor (Move dir) world =
   inRange (bounds worldMap) destination &&
   opacity (worldMap ! destination) == Transparent
   where
     worldMap = world ^. map
-    destination = move dir (world ^. player.location)
+    destination = move dir (actor ^. location)
 
 performCommand :: Command -> World -> World
 performCommand (Move dir) = over (player.location) (move dir)

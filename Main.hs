@@ -11,9 +11,11 @@ main :: IO ()
 main = do
   vty <- mkVty def
   map <- randomMap
-  play vty (World (Player (5, 5) 25 0 0) map 0 mobs)
+  play vty (makeWorld map player mobs)
   shutdown vty
-  where mobs = [Mob (10, 10) 100 Zombie]
+  where
+    player = Player (5, 5) 25 0 0
+    mobs = [Mob (10, 10) 100 Zombie]
 
 randomMap :: IO Map
 randomMap = do

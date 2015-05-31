@@ -3,7 +3,7 @@ module Logic where
 import RoguePrelude
 import Types
 import Control.Monad.Random
-import Control.Lens ((^.), over)
+import Control.Lens ((^.), over, _2)
 import FOV
 
 data Action = ActionCommand Command
@@ -46,7 +46,7 @@ type Ticker = Rand StdGen
 tick :: World -> Ticker World
 tick =  pure . over turn succ
     >=> player tickPlayer
-    >=> mobs (traverse wiggle)
+    >=> (mobs.traverse._2) wiggle
 
 randomDirection :: Ticker Direction
 randomDirection = do

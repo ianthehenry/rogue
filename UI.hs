@@ -8,7 +8,7 @@ import Types
 import Logic
 import Control.Monad.Random (evalRandIO)
 import FOV (Visibility(..), ShadowMap)
-import Control.Lens ((^.), to)
+import Control.Lens ((^.), (^..), to, _2)
 
 play :: Vty -> World -> IO ()
 play vty world = do
@@ -65,7 +65,7 @@ drawWorld :: Rect -> World -> [Image]
 drawWorld rect@(left, top, width, height) world = catMaybes (playerImage:mobImages) <> [mapImage]
   where
     playerImage = positionedThing rect globalShadowMap drawPlayer (world ^. player)
-    mobImages = positionedThing rect globalShadowMap drawMob <$> (world ^. mobs)
+    mobImages = positionedThing rect globalShadowMap drawMob <$> (world ^.. mobs.traverse._2)
     mapImage = drawMap localShadowMap (rect, worldMap)
     localShadowMap = translateMap (-left, -top) globalShadowMap
     globalShadowMap = makeShadowMap (world ^. player) worldMap

@@ -6,7 +6,7 @@
 module Types where
 
 import RoguePrelude
-import Control.Lens (makeFields)
+import Control.Lens
 
 data Direction = North | South | East | West deriving (Eq, Show)
 
@@ -26,20 +26,33 @@ data Player = Player { _playerLocation :: Coord
                      }
 $(makeFields ''Player)
 
-data MobType = Zombie
+data MobSpecies = Zombie
+type Id = Int
+
+type Identified a = (Id, a)
 
 data Mob = Mob { _mobLocation :: Coord
                , _mobHealth :: Int
-               , _mobSpecies :: MobType
+               , _mobSpecies :: MobSpecies
                }
 $(makeFields ''Mob)
 
 data World = World { _worldPlayer :: Player
                    , _worldMap :: Map
                    , _worldTurn :: Int
-                   , _worldMobs :: [Mob]
+                   , _worldNextId :: Int
+                   , _worldMobs :: [Identified Mob]
                    }
 $(makeFields ''World)
+
+makeWorld :: Map -> Player -> [Mob] -> World
+makeWorld map player mobs = foldr ($) emptyWorld (addMob <$> mobs)
+  where emptyWorld = (World player map 0 0 [])
+
+addMob :: Mob -> World -> World
+addMob mob world = world & mobs %~ (newMob :)
+                         & nextId %~ succ
+  where newMob = (world ^. nextId, mob)
 
 pointJoin :: (Int -> Int -> Int) -> Coord -> Delta -> Coord
 pointJoin f (x, y) (x', y') = (f x x', f y y')

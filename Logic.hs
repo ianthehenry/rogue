@@ -1,9 +1,13 @@
+{-# LANGUAGE RankNTypes #-}
+
 module Logic where
 
 import RoguePrelude
 import Types
+import Control.Monad.Reader (ReaderT)
+import Control.Monad.State (StateT)
 import Control.Monad.Random
-import Control.Lens ((^.), over, _2)
+import Control.Lens ((^.), over, _2, filtered)
 import FOV
 
 data Action = ActionCommand Command
@@ -41,14 +45,14 @@ interpretFatigue n
   where
     hours = (6 * 60 *)
 
-type Ticker = Rand StdGen
+type Ticker a = forall m. MonadRandom m => m a
 
 tick :: World -> Ticker World
 tick =  pure . over turn succ
     >=> player tickPlayer
     >=> (mobs.traverse._2) wiggle
 
-randomDirection :: Ticker Direction
+randomDirection :: MonadRandom m => m Direction
 randomDirection = do
   i <- getRandomR (0, 3 :: Int)
   pure $ case i of
@@ -61,6 +65,16 @@ wiggle :: Mob -> Ticker Mob
 wiggle mob = do
   direction <- randomDirection
   pure (over location (move direction) mob)
+
+type Memories = Coord
+type Thoughtful memtype = StateT memtype (ReaderT (Mob, Map) (RandT StdGen IO))
+type Brain memtype = Thoughtful memtype Command
+
+zombieBrain :: Brain ()
+zombieBrain = Move <$> randomDirection
+
+zmap :: (a -> b) -> [a] -> [(a, b)]
+zmap f xs = zip xs (fmap f xs)
 
 tickPlayer :: Player -> Ticker Player
 tickPlayer =  pure . over hunger succ
@@ -79,6 +93,20 @@ canPerformCommand actor (Move dir) world =
   where
     worldMap = world ^. map
     destination = move dir (actor ^. location)
+
+hasId :: Id -> (Id, a) -> Bool
+hasId x (y, _) = x == y
+
+survey :: [Identified Mob] -> Thoughtful () [(Id, Command)]
+survey mobs = sequence (rearrange <$> withBrains)
+  where
+    withBrains = zmap (const zombieBrain) mobs
+    rearrange :: ((Id, Mob), Brain ()) -> Thoughtful () (Id, Command)
+    rearrange ((id, _), brain) = (id, ) <$> brain
+
+performMobCommand :: (Id, Command) -> World -> World
+performMobCommand (id, (Move dir)) =
+  over (mobs.traverse.filtered (hasId id)._2.location) (move dir)
 
 performCommand :: Command -> World -> World
 performCommand (Move dir) = over (player.location) (move dir)

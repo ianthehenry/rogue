@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleContexts #-}
-
 module UI (play) where
 
 import Graphics.Vty

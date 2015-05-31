@@ -31,6 +31,9 @@ type Id = Int
 
 type Identified a = (Id, a)
 
+hasId :: Id -> (Id, a) -> Bool
+hasId x (y, _) = x == y
+
 data Mob = Mob { _mobLocation :: Coord
                , _mobHealth :: Int
                , _mobSpecies :: MobSpecies

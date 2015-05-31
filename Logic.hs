@@ -7,7 +7,7 @@ import Types
 import Control.Monad.Reader (ReaderT)
 import Control.Monad.State (StateT)
 import Control.Monad.Random
-import Control.Lens ((^.), over, _2, filtered)
+import Control.Lens
 import FOV
 
 data Action = ActionCommand Command
@@ -50,7 +50,7 @@ type Ticker a = forall m. MonadRandom m => m a
 tick :: World -> Ticker World
 tick =  pure . over turn succ
     >=> player tickPlayer
-    >=> (mobs.traverse._2) wiggle
+    >=> (mobs.traverse._2) tickMob
 
 randomDirection :: MonadRandom m => m Direction
 randomDirection = do
@@ -61,10 +61,8 @@ randomDirection = do
     2 -> East
     3 -> North
 
-wiggle :: Mob -> Ticker Mob
-wiggle mob = do
-  direction <- randomDirection
-  pure (over location (move direction) mob)
+tickMob :: Mob -> Ticker Mob
+tickMob = pure
 
 type Memories = Coord
 type Thoughtful memtype = StateT memtype (ReaderT (Mob, Map) (RandT StdGen IO))
@@ -94,19 +92,26 @@ canPerformCommand actor (Move dir) world =
     worldMap = world ^. map
     destination = move dir (actor ^. location)
 
-hasId :: Id -> (Id, a) -> Bool
-hasId x (y, _) = x == y
-
-survey :: [Identified Mob] -> Thoughtful () [(Id, Command)]
-survey mobs = sequence (rearrange <$> withBrains)
+survey :: [Identified Mob] -> [(Id, Mob, Brain ())]
+survey mobs = rearrange <$> zmap (const zombieBrain) mobs
   where
-    withBrains = zmap (const zombieBrain) mobs
-    rearrange :: ((Id, Mob), Brain ()) -> Thoughtful () (Id, Command)
-    rearrange ((id, _), brain) = (id, ) <$> brain
+    rearrange :: ((a, b), c) -> (a, b, c)
+    rearrange ((x, y), z) = (x, y, z)
+
+mobWithId :: Id -> Traversal World World Mob Mob
+mobWithId id = mobs.traverse.filtered (hasId id)._2
+
+performMobCommandIfPossible :: (Id, Command) -> World -> World
+performMobCommandIfPossible (id, command) world =
+  if canPerformCommand mob command world then
+    performMobCommand (id, command) world
+  else
+    world
+  where mob = world ^?! mobWithId id
 
 performMobCommand :: (Id, Command) -> World -> World
 performMobCommand (id, (Move dir)) =
-  over (mobs.traverse.filtered (hasId id)._2.location) (move dir)
+  over (mobWithId id.location) (move dir)
 
 performCommand :: Command -> World -> World
 performCommand (Move dir) = over (player.location) (move dir)

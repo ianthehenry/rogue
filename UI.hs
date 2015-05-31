@@ -4,9 +4,19 @@ import Graphics.Vty
 import RoguePrelude
 import Types
 import Logic
-import Control.Monad.Random (evalRandIO)
+import System.Random (getStdGen)
+import Control.Monad.Reader (runReaderT)
+import Control.Monad.State (evalStateT)
+import Control.Monad.Random (evalRandIO, evalRandT)
 import FOV (Visibility(..), ShadowMap)
 import Control.Lens ((^.), (^..), to, _2)
+
+think :: memtype -> Mob -> Map -> Thoughtful memtype a -> IO a
+think mem mob map brain = do
+  gen <- getStdGen
+  let readerPart = evalStateT brain mem
+      randomPart = runReaderT readerPart (mob, map)
+  evalRandT randomPart gen
 
 play :: Vty -> World -> IO ()
 play vty world = do
@@ -17,8 +27,17 @@ play vty world = do
     Just action -> case action of
       ActionQuit -> return ()
       ActionCommand c -> if canPerformCommand (world ^. player) c world then do
-        newWorld <- evalRandIO (tick (performCommand c world))
-        play vty newWorld
+        let brains = survey (world ^. mobs)
+
+        worldSteppers <- for brains $ \(id, mob, brain) -> do
+          command <- think () mob (world ^. map) brain
+          pure (performMobCommandIfPossible (id, command))
+
+        let world' = performCommand c world
+            world'' = foldr ($) world' worldSteppers
+
+        world''' <- evalRandIO (tick world'')
+        play vty world'''
       else
         again
   where again = play vty world

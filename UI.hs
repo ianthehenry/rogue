@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RankNTypes #-}
 
 module UI (play) where
 
@@ -59,9 +60,15 @@ interpretAction (Just (ActionCommand c)) = do
 
     world %= performCommand c
     world %= runAll worldSteppers
-    w <- use world
-    w' <- liftIO (evalRandIO (tick w))
-    world .= w'
+    world %=! evalRandIO . tick
+
+infix 4 %=!
+
+(%=!) :: (MonadIO m, MonadState t m) => Lens' t a -> (a -> IO a) -> m ()
+lens %=! f = do
+  s <- use lens
+  s' <- liftIO (f s)
+  lens .= s'
 
 runAll :: [(a -> a)] -> a -> a
 runAll fns state = foldr ($) state fns

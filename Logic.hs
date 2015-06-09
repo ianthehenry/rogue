@@ -10,9 +10,6 @@ import Control.Monad.Random
 import Control.Lens
 import FOV
 
-data Action = ActionCommand Command
-            | ActionQuit
-
 data Command = Move Direction
 
 data HungerInterpretation = Full | Fine | Peckish | Hungry | Starving | Ravenous deriving (Show)

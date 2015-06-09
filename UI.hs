@@ -1,3 +1,8 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
+
 module UI (play) where
 
 import Graphics.Vty
@@ -5,11 +10,23 @@ import RoguePrelude
 import Types
 import Logic
 import System.Random (getStdGen)
-import Control.Monad.Reader (runReaderT)
-import Control.Monad.State (evalStateT)
+import Control.Monad.Trans.Maybe
+import Control.Monad.Reader
+import Control.Monad.State
 import Control.Monad.Random (evalRandIO, evalRandT)
 import FOV (Visibility(..), ShadowMap)
-import Control.Lens ((^.), (^..), to, _2)
+import Control.Lens
+
+data Action = ActionCommand Command
+            | ActionMenu MenuPage
+            | ActionQuit
+
+data MenuPage = MenuInventory
+
+data GameState = GameState { _gameStateMenuPage :: Maybe MenuPage
+                           , _gameStateWorld :: World
+                           }
+$(makeFields ''GameState)
 
 think :: memtype -> Mob -> Map -> Thoughtful memtype a -> IO a
 think mem mob map brain = do
@@ -18,35 +35,50 @@ think mem mob map brain = do
       randomPart = runReaderT readerPart (mob, map)
   evalRandT randomPart gen
 
+step :: ReaderT Vty (MaybeT (StateT GameState IO)) ()
+step = do
+  vty <- ask
+  w <- view world <$> get
+  liftIO (updateDisplay vty w)
+
+  maybeAction <- parseEvent <$> liftIO (nextEvent vty)
+  lift (interpretAction maybeAction)
+
+interpretAction :: Maybe Action -> MaybeT (StateT GameState IO) ()
+interpretAction Nothing = pure ()
+interpretAction (Just ActionQuit) = mzero
+interpretAction (Just (ActionMenu page)) = menuPage .= Just page
+interpretAction (Just (ActionCommand c)) = do
+  w <- use world
+  when (canPerformCommand (w ^. player) c w) $ do
+    let brains = survey (w ^. mobs)
+
+    worldSteppers <- for brains $ \(id, mob, brain) -> do
+      command <- liftIO (think () mob (w ^. map) brain)
+      pure (performMobCommandIfPossible (id, command))
+
+    world %= performCommand c
+    world %= runAll worldSteppers
+    w <- use world
+    w' <- liftIO (evalRandIO (tick w))
+    world .= w'
+
+runAll :: [(a -> a)] -> a -> a
+runAll fns state = foldr ($) state fns
+
 play :: Vty -> World -> IO ()
-play vty world = do
-  updateDisplay vty world
-  maybeAction <- parseEvent <$> nextEvent vty
-  case maybeAction of
-    Nothing -> again
-    Just action -> case action of
-      ActionQuit -> return ()
-      ActionCommand c -> if canPerformCommand (world ^. player) c world then do
-        let brains = survey (world ^. mobs)
+play vty w = evalStateT (runMaybeT_ (runReaderT (forever step) vty)) gameState
+  where gameState = GameState Nothing w
 
-        worldSteppers <- for brains $ \(id, mob, brain) -> do
-          command <- think () mob (world ^. map) brain
-          pure (performMobCommandIfPossible (id, command))
-
-        let world' = performCommand c world
-            world'' = foldr ($) world' worldSteppers
-
-        world''' <- evalRandIO (tick world'')
-        play vty world'''
-      else
-        again
-  where again = play vty world
+runMaybeT_ :: Monad m => MaybeT m a -> m ()
+runMaybeT_ m = runMaybeT m $> ()
 
 parseEvent :: Event -> Maybe Action
 parseEvent (EvKey KUp [])    = c (Move North)
 parseEvent (EvKey KDown [])  = c (Move South)
 parseEvent (EvKey KRight []) = c (Move East)
 parseEvent (EvKey KLeft [])  = c (Move West)
+parseEvent (EvKey (KChar 'e') [])  = Just (ActionMenu MenuInventory)
 parseEvent (EvKey (KChar 'q') []) = Just ActionQuit
 parseEvent _ = Nothing
 
@@ -61,7 +93,7 @@ drawPlayer _ = char defAttr '@'
 
 positionImage :: HasLocation a Coord => Rect -> a -> Image -> Maybe Image
 positionImage rect thing image
-  | contains rect coord = Just (translate x y image)
+  | containsCoord rect coord = Just (translate x y image)
   | otherwise = Nothing
   where
     coord = thing ^. location

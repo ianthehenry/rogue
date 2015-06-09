@@ -89,6 +89,6 @@ lookup i a | inRange (bounds a) i = Just (a ! i)
 globalToLocal :: Rect -> Coord -> Coord
 globalToLocal (left, top, _, _) (x, y) = (x - left, y - top)
 
-contains :: Rect -> Coord -> Bool
-contains (left, top, width, height) (x, y) = inRange (left, left + width) x
-                                          && inRange (top, top + height) y
+containsCoord :: Rect -> Coord -> Bool
+containsCoord (left, top, width, height) (x, y) = inRange (left, left + width) x
+                                               && inRange (top, top + height) y

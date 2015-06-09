@@ -12,7 +12,7 @@ executable rogue
   default-extensions:  NoImplicitPrelude, TupleSections, FlexibleContexts
   build-depends:       base ==4.*, base-prelude
                      , array
-                     , mtl
+                     , mtl, transformers
                      , vty, data-default
                      , random, MonadRandom
                      , lens

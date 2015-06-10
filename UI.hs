@@ -41,15 +41,13 @@ step = do
   vty <- ask
   w <- view world <$> get
   liftIO (updateDisplay vty w)
-
   maybeAction <- parseEvent <$> liftIO (nextEvent vty)
-  lift (interpretAction maybeAction)
+  maybe (pure ()) (lift . interpretAction) maybeAction
 
-interpretAction :: Maybe Action -> MaybeT (StateT GameState IO) ()
-interpretAction Nothing = pure ()
-interpretAction (Just ActionQuit) = mzero
-interpretAction (Just (ActionMenu page)) = menuPage .= Just page
-interpretAction (Just (ActionCommand c)) = do
+interpretAction :: Action -> MaybeT (StateT GameState IO) ()
+interpretAction ActionQuit = mzero
+interpretAction (ActionMenu page) = menuPage .= Just page
+interpretAction (ActionCommand c) = do
   w <- use world
   when (canPerformCommand (w ^. player) c w) $ do
     let brains = survey (w ^. mobs)

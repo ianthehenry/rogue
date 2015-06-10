@@ -10,11 +10,11 @@ import Control.Lens
 
 data Direction = North | South | East | West deriving (Eq, Show)
 
-type Map = Array Coord Tile
+type Topo = Array Coord Tile
 type Coord = (Int, Int)
 type Delta = (Int, Int)
 type Rect = (Int, Int, Int, Int)
-type MapSegment = (Rect, Map)
+type TopoSegment = (Rect, Topo)
 type Size = (Int, Int)
 
 data Tile = Grass | Tree | Rock deriving (Show, Eq)
@@ -41,16 +41,16 @@ data Mob = Mob { _mobLocation :: Coord
 $(makeFields ''Mob)
 
 data World = World { _worldPlayer :: Player
-                   , _worldMap :: Map
+                   , _worldTopo :: Topo
                    , _worldTurn :: Int
                    , _worldNextId :: Int
                    , _worldMobs :: [Identified Mob]
                    }
 $(makeFields ''World)
 
-makeWorld :: Map -> Player -> [Mob] -> World
-makeWorld map player mobs = foldr ($) emptyWorld (addMob <$> mobs)
-  where emptyWorld = (World player map 0 0 [])
+makeWorld :: Topo -> Player -> [Mob] -> World
+makeWorld topo player mobs = foldr ($) emptyWorld (addMob <$> mobs)
+  where emptyWorld = (World player topo 0 0 [])
 
 addMob :: Mob -> World -> World
 addMob mob world = world & mobs %~ (newMob :)
@@ -72,12 +72,12 @@ pointScaleF m (x, y) = (round (fromIntegral x * m), round (fromIntegral y * m))
 pointScale :: Int -> Delta -> Delta
 pointScale m (x, y) = (x * m, y * m)
 
-lookupTile :: Coord -> MapSegment -> Maybe Tile
-lookupTile (x, y) ((left, top, width, height), map)
+lookupTile :: Coord -> TopoSegment -> Maybe Tile
+lookupTile (x, y) ((left, top, width, height), topo)
   |    inRange (0, width - 1) x
     && inRange (0, height - 1) y
-    && inRange (bounds map) globalPoint
-    = Just (map ! globalPoint)
+    && inRange (bounds topo) globalPoint
+    = Just (topo ! globalPoint)
   | otherwise = Nothing
   where
     globalPoint = (x + left, y + top)

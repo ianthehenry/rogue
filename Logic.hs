@@ -62,7 +62,7 @@ tickMob :: Mob -> Ticker Mob
 tickMob = pure
 
 type Memories = Coord
-type Thoughtful memtype = StateT memtype (ReaderT (Mob, Map) (RandT StdGen IO))
+type Thoughtful memtype = StateT memtype (ReaderT (Mob, Topo) (RandT StdGen IO))
 type Brain memtype = Thoughtful memtype Command
 
 zombieBrain :: Brain ()
@@ -83,10 +83,10 @@ move West  (x, y) = (x - 1, y)
 
 canPerformCommand :: HasLocation a Coord => a -> Command -> World -> Bool
 canPerformCommand actor (Move dir) world =
-  inRange (bounds worldMap) destination &&
-  opacity (worldMap ! destination) == Transparent
+  inRange (bounds worldTopo) destination &&
+  opacity (worldTopo ! destination) == Transparent
   where
-    worldMap = world ^. map
+    worldTopo = world ^. topo
     destination = move dir (actor ^. location)
 
 survey :: [Identified Mob] -> [(Id, Mob, Brain ())]
@@ -113,14 +113,14 @@ performMobCommand (id, (Move dir)) =
 performCommand :: Command -> World -> World
 performCommand (Move dir) = over (player.location) (move dir)
 
-makeShadowMap :: Player -> Map -> ShadowMap
-makeShadowMap player map = translateMap playerPosition clampedShadowMap
+makeShadowTopo :: Player -> Topo -> ShadowTopo
+makeShadowTopo player topo = translateTopo playerPosition clampedShadowTopo
   where
     playerPosition = player ^. location
     viewDistance = player ^. sightRadius
-    obstructionMap = makeObstructionMap playerPosition viewDistance map
-    shadowMap = fieldOfView obstructionMap
-    clampedShadowMap = mapArray (clampCircle viewDistance) shadowMap
+    obstructionTopo = makeObstructionTopo playerPosition viewDistance topo
+    shadowTopo = fieldOfView obstructionTopo
+    clampedShadowTopo = mapArray (clampCircle viewDistance) shadowTopo
 
 clampCircle :: Int -> Coord -> Visibility -> Visibility
 clampCircle _ _ Hidden = Hidden
@@ -131,20 +131,20 @@ clampCircle radius (x, y) Visible
 mapArray :: Ix i => (i -> a -> b) -> Array i a -> Array i b
 mapArray f a = (listArray (bounds a) . fmap (uncurry f) . assocs) a
 
-makeObstructionMap :: Coord -> Int -> Map -> ObstructionMap
-makeObstructionMap center viewDistance map = array bounds' obstructions
+makeObstructionTopo :: Coord -> Int -> Topo -> ObstructionTopo
+makeObstructionTopo center viewDistance topo = array bounds' obstructions
   where
     bounds' = ((-viewDistance, -viewDistance), (viewDistance, viewDistance))
     obstructions = do
       local <- range bounds'
       let global = localToGlobal local
-      return (local, maybe Opaque opacity (lookup global map))
+      return (local, maybe Opaque opacity (lookup global topo))
     localToGlobal = addPoint center
 
-translateMap :: Coord -> (Array Coord a) -> (Array Coord a)
-translateMap delta map = ixmap newBounds unoffset map
+translateTopo :: Coord -> (Array Coord a) -> (Array Coord a)
+translateTopo delta topo = ixmap newBounds unoffset topo
   where
-    newBounds = mapBoth offset (bounds map)
+    newBounds = mapBoth offset (bounds topo)
     offset = addPoint delta
     unoffset = (`subPoint` delta)
     mapBoth f (x, y) = (f x, f y)

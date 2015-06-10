@@ -10,15 +10,15 @@ import UI
 main :: IO ()
 main = do
   vty <- mkVty def
-  map <- randomMap
-  play vty (makeWorld map player mobs)
+  topo <- randomTopo
+  play vty (makeWorld topo player mobs)
   shutdown vty
   where
     player = Player (5, 5) 25 0 0
     mobs = [Mob (10, 10) 100 Zombie]
 
-randomMap :: IO Map
-randomMap = do
+randomTopo :: IO Topo
+randomTopo = do
   pieces <- replicateM (rangeSize mapBounds) randomPiece
   return (listArray mapBounds pieces)
   where

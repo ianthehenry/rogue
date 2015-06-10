@@ -1,7 +1,7 @@
 module FOV
 ( fieldOfView
-, ShadowMap
-, ObstructionMap
+, ShadowTopo
+, ObstructionTopo
 , Visibility(..)
 , Opacity(..)
 ) where
@@ -11,12 +11,12 @@ import Types
 import Control.Monad.Writer (Writer, tell, execWriter)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
 
-type ScanInfo = (ObstructionMap, Int, (Delta, Delta))
+type ScanInfo = (ObstructionTopo, Int, (Delta, Delta))
 type Scanning = ReaderT ScanInfo (Writer (Dual [Coord]))
 type Slope = Rational
 
-type ShadowMap = Array Coord Visibility
-type ObstructionMap = Array Coord Opacity
+type ShadowTopo = Array Coord Visibility
+type ObstructionTopo = Array Coord Opacity
 
 data Visibility = Visible | Hidden deriving (Eq, Show)
 data Opacity = Transparent | Opaque deriving (Eq)
@@ -40,18 +40,18 @@ octants = do
   minorSign <- [1, -1]
   return (along axis majorSign, along (otherAxis axis) minorSign)
 
--- The bounds of obstructionMap must be a square centered at 0,0 with an odd
+-- The bounds of obstructionTopo must be a square centered at 0,0 with an odd
 -- length side, or everything will crash. So, like, ((-10, -10), (10, 10)) is
 -- a valid bounds choice.
-fieldOfView :: ObstructionMap -> ShadowMap
-fieldOfView obstructionMap = initialShadowMap // fmap (, Visible) visibleCoords
+fieldOfView :: ObstructionTopo -> ShadowTopo
+fieldOfView obstructionTopo = initialShadowTopo // fmap (, Visible) visibleCoords
   where
     visibleCoords = getDual (execWriter runOctants)
-    mapBounds = bounds obstructionMap
+    mapBounds = bounds obstructionTopo
     (_, (squadius, _)) = mapBounds
     runOctants = forM_ octants runOctant
-    runOctant octant = runReaderT (scan 0 0 1) (obstructionMap, squadius, octant)
-    initialShadowMap = listArray mapBounds (repeat Hidden)
+    runOctant octant = runReaderT (scan 0 0 1) (obstructionTopo, squadius, octant)
+    initialShadowTopo = listArray mapBounds (repeat Hidden)
 
 glueA2 :: Applicative f => (a -> b -> f c) -> (a -> b -> f d) -> (a -> b -> f d)
 glueA2 a1 a2 x y = (a1 x y) *> (a2 x y)
@@ -65,13 +65,13 @@ type ScanFolding a = (Slope, Maybe Opacity) -> (Opacity, Coord) -> Scanning a
 
 scan :: Int -> Slope -> Slope -> Scanning ()
 scan distance initialStartSlope initialEndSlope = do
-  (obstructionMap, maxDistance, deltas@(majorDelta, minorDelta)) <- ask
+  (obstructionTopo, maxDistance, deltas@(majorDelta, minorDelta)) <- ask
   when (initialStartSlope <= initialEndSlope && distance <= maxDistance) $ do
     let pointAt slope = pointScaleF (fromIntegral distance * slope) majorDelta
                         `addPoint`
                         pointScale distance minorDelta
     let spacesToLookAt = from majorDelta (pointAt initialStartSlope) (pointAt initialEndSlope)
-    let visibilities = mapWith (obstructionMap !) spacesToLookAt
+    let visibilities = mapWith (obstructionTopo !) spacesToLookAt
     let step = stepper deltas
     (newStartSlope, last) <- foldM (glueA2 reveal (preserving step)) (initialStartSlope, Nothing) visibilities
     when (last == Just Transparent) (scan (distance + 1) newStartSlope initialEndSlope)

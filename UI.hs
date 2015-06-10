@@ -15,7 +15,7 @@ import Control.Monad.Trans.Maybe
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Random (evalRandIO, evalRandT)
-import FOV (Visibility(..), ShadowMap)
+import FOV (Visibility(..), ShadowTopo)
 import Control.Lens
 
 data Action = ActionCommand Command
@@ -29,11 +29,11 @@ data GameState = GameState { _gameStateMenuPage :: Maybe MenuPage
                            }
 $(makeFields ''GameState)
 
-think :: memtype -> Mob -> Map -> Thoughtful memtype a -> IO a
-think mem mob map brain = do
+think :: memtype -> Mob -> Topo -> Thoughtful memtype a -> IO a
+think mem mob topo brain = do
   gen <- getStdGen
   let readerPart = evalStateT brain mem
-      randomPart = runReaderT readerPart (mob, map)
+      randomPart = runReaderT readerPart (mob, topo)
   evalRandT randomPart gen
 
 step :: ReaderT Vty (MaybeT (StateT GameState IO)) ()
@@ -53,7 +53,7 @@ interpretAction (ActionCommand c) = do
     let brains = survey (w ^. mobs)
 
     worldSteppers <- for brains $ \(id, mob, brain) -> do
-      command <- liftIO (think () mob (w ^. map) brain)
+      command <- liftIO (think () mob (w ^. topo) brain)
       pure (performMobCommandIfPossible (id, command))
 
     world %= performCommand c
@@ -104,26 +104,26 @@ positionImage rect thing image
     coord = thing ^. location
     (x, y) = globalToLocal rect coord
 
-checkMap :: HasLocation a Coord => ShadowMap -> a -> Image -> Maybe Image
-checkMap shadowMap thing image
-  | (shadowMap ! coord) == Visible = Just image
+checkTopo :: HasLocation a Coord => ShadowTopo -> a -> Image -> Maybe Image
+checkTopo shadowTopo thing image
+  | (shadowTopo ! coord) == Visible = Just image
   | otherwise = Nothing
   where coord = thing ^. location
 
-positionedThing :: HasLocation a Coord => Rect -> ShadowMap -> (a -> Image) -> a -> Maybe Image
-positionedThing rect shadowMap draw thing = do
+positionedThing :: HasLocation a Coord => Rect -> ShadowTopo -> (a -> Image) -> a -> Maybe Image
+positionedThing rect shadowTopo draw thing = do
   positioned <- positionImage rect thing (draw thing)
-  checkMap shadowMap thing positioned
+  checkTopo shadowTopo thing positioned
 
 drawWorld :: Rect -> World -> [Image]
 drawWorld rect@(left, top, width, height) world = catMaybes (playerImage:mobImages) <> [mapImage]
   where
-    playerImage = positionedThing rect globalShadowMap drawPlayer (world ^. player)
-    mobImages = positionedThing rect globalShadowMap drawMob <$> (world ^.. mobs.traverse._2)
-    mapImage = drawMap localShadowMap (rect, worldMap)
-    localShadowMap = translateMap (-left, -top) globalShadowMap
-    globalShadowMap = makeShadowMap (world ^. player) worldMap
-    worldMap = world ^. map
+    playerImage = positionedThing rect globalShadowTopo drawPlayer (world ^. player)
+    mobImages = positionedThing rect globalShadowTopo drawMob <$> (world ^.. mobs.traverse._2)
+    mapImage = drawTopo localShadowTopo (rect, worldTopo)
+    localShadowTopo = translateTopo (-left, -top) globalShadowTopo
+    globalShadowTopo = makeShadowTopo (world ^. player) worldTopo
+    worldTopo = world ^. topo
 
 messageLog :: Player -> Size -> Image
 messageLog _ (width, height) = emptyImage
@@ -210,12 +210,12 @@ charForTile Rock = '#'
 charForTile Tree = '♣'
 charForTile Grass = '·'
 
-drawMap :: ShadowMap -> MapSegment -> Image
-drawMap shadowMap segment@((_, _, width, height), map) = (vertCat . fmap rowImage) (range (0, height))
+drawTopo :: ShadowTopo -> TopoSegment -> Image
+drawTopo shadowTopo segment@((_, _, width, height), topo) = (vertCat . fmap rowImage) (range (0, height))
   where
     rowImage y = (horizCat . fmap (translateX 0 . imageAt)) row
       where row = range ((0, y), (width, y))
     imageAt coord | isVisible coord = char defAttr (charAt coord)
                   | otherwise = char defAttr ' '
     charAt coord = maybe '^' charForTile (lookupTile coord segment)
-    isVisible coord = inRange (bounds shadowMap) coord && (shadowMap ! coord) == Visible
+    isVisible coord = inRange (bounds shadowTopo) coord && (shadowTopo ! coord) == Visible

@@ -10,11 +10,11 @@ import Graphics.Vty
 import RoguePrelude
 import Types
 import Logic
-import System.Random (getStdGen)
+import System.Random
 import Control.Monad.Trans.Maybe
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad.Random (evalRandIO, evalRandT)
+import Control.Monad.Random
 import FOV (Visibility(..), ShadowTopo)
 import Control.Lens
 
@@ -29,11 +29,11 @@ data GameState = GameState { _gameStateMenuPage :: Maybe MenuPage
                            }
 $(makeFields ''GameState)
 
-think :: memtype -> Mob -> Topo -> Thoughtful memtype a -> IO a
-think mem mob topo brain = do
+think :: memtype -> Actor -> Topo -> Thoughtful memtype a -> IO a
+think mem actor topo brain = do
   gen <- getStdGen
   let readerPart = evalStateT brain mem
-      randomPart = runReaderT readerPart (mob, topo)
+      randomPart = runReaderT readerPart (actor, topo)
   evalRandT randomPart gen
 
 step :: ReaderT Vty (MaybeT (StateT GameState IO)) ()
@@ -50,13 +50,14 @@ interpretAction (ActionMenu page) = menuPage .= Just page
 interpretAction (ActionCommand c) = do
   w <- use world
   when (canPerformCommand (w ^. player) c w) $ do
-    let brains = survey (w ^. mobs)
+    -- tail is the extremely gross way to exclude the player's "brain"
+    let brains = tail $ survey (w ^. actors.to itoList)
 
-    worldSteppers <- for brains $ \(id, mob, brain) -> do
-      command <- liftIO (think () mob (w ^. topo) brain)
-      pure (performMobCommandIfPossible (id, command))
+    worldSteppers <- for brains $ \(id, actor, brain) -> do
+      command <- liftIO (think () actor (w ^. topo) brain)
+      pure (performCommandIfPossible (id, command))
 
-    world %= performCommand c
+    world %= performCommand (0, c)
     world %= runAll worldSteppers
     world %=! evalRandIO . tick
 
@@ -67,9 +68,6 @@ lens %=! f = do
   s <- use lens
   s' <- liftIO (f s)
   lens .= s'
-
-runAll :: [(a -> a)] -> a -> a
-runAll fns state = foldr ($) state fns
 
 play :: Vty -> World -> IO ()
 play vty w = evalStateT (runMaybeT_ (runReaderT (forever step) vty)) gameState
@@ -90,11 +88,11 @@ parseEvent _ = Nothing
 c :: Command -> Maybe Action
 c = Just . ActionCommand
 
-drawMob :: Mob -> Image
-drawMob _ = char defAttr 'Z'
+drawActor :: Actor -> Image
+drawActor actor = char defAttr (charFor (actor ^. species))
 
-drawPlayer :: Player -> Image
-drawPlayer _ = char defAttr '@'
+charFor Zombie = 'Z'
+charFor Human = '@'
 
 positionImage :: HasLocation a Coord => Rect -> a -> Image -> Maybe Image
 positionImage rect thing image
@@ -116,16 +114,15 @@ positionedThing rect shadowTopo draw thing = do
   checkTopo shadowTopo thing positioned
 
 drawWorld :: Rect -> World -> [Image]
-drawWorld rect@(left, top, width, height) world = catMaybes (playerImage:mobImages) <> [mapImage]
+drawWorld rect@(left, top, width, height) world = catMaybes actorImages <> [mapImage]
   where
-    playerImage = positionedThing rect globalShadowTopo drawPlayer (world ^. player)
-    mobImages = positionedThing rect globalShadowTopo drawMob <$> (world ^.. mobs.traverse._2)
+    actorImages = positionedThing rect globalShadowTopo drawActor <$> (world ^. actors.to toList)
     mapImage = drawTopo localShadowTopo (rect, worldTopo)
     localShadowTopo = translateTopo (-left, -top) globalShadowTopo
     globalShadowTopo = makeShadowTopo (world ^. player) worldTopo
     worldTopo = world ^. topo
 
-messageLog :: Player -> Size -> Image
+messageLog :: Actor -> Size -> Image
 messageLog _ (width, height) = emptyImage
 
 twoDigit :: Int -> String
@@ -157,10 +154,10 @@ instance Show FatigueInterpretation where
   show Exhausted = "Exhausted"
   show BarelyAwake = "About to Drop"
 
-playerInfo :: Player -> Size -> Image
-playerInfo player (width, height) = vertCat $ fmap (string defAttr)
-  [ "Hunger: " <> (player ^. hungerString)
-  , "Fatigue: " <> (player ^. fatigueString)
+actorInfo :: Actor -> Size -> Image
+actorInfo actor (width, height) = vertCat $ fmap (string defAttr)
+  [ "Hunger: " <> (actor ^. hungerString)
+  , "Fatigue: " <> (actor ^. fatigueString)
   ]
   where
     hungerString = hunger . to interpretHunger . to show
@@ -197,7 +194,7 @@ updateDisplay vty world = do
     you = world ^. player
     borderWidth = 1
     playerPosition = you ^. location
-    makeMenu = stack [worldInfo world, playerInfo you, messageLog you]
+    makeMenu = stack [worldInfo world, actorInfo you, messageLog you]
 
 rectCenteredAt :: Coord -> Size -> Rect
 rectCenteredAt (x, y) (width, height) = (x - width `div` 2, y - height `div` 2, width, height)

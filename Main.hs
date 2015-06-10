@@ -11,11 +11,11 @@ main :: IO ()
 main = do
   vty <- mkVty def
   topo <- randomTopo
-  play vty (makeWorld topo player mobs)
+  play vty (makeWorld topo (player:mobs))
   shutdown vty
   where
-    player = Player (5, 5) 25 0 0
-    mobs = [Mob (10, 10) 100 Zombie]
+    player = Actor (5, 5) 25 0 0 Human
+    mobs = [Actor (10, 10) 5 0 0 Zombie]
 
 randomTopo :: IO Topo
 randomTopo = do

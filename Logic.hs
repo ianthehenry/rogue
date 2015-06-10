@@ -47,7 +47,7 @@ type Ticker a = forall m. MonadRandom m => m a
 tick :: World -> Ticker World
 tick =  pure . over turn succ
     >=> player tickPlayer
-    >=> (mobs.traverse._2) tickMob
+    >=> (actors.traverse) tickActor
 
 randomDirection :: MonadRandom m => m Direction
 randomDirection = do
@@ -58,11 +58,10 @@ randomDirection = do
     2 -> East
     3 -> North
 
-tickMob :: Mob -> Ticker Mob
-tickMob = pure
+tickActor :: Actor -> Ticker Actor
+tickActor = pure
 
-type Memories = Coord
-type Thoughtful memtype = StateT memtype (ReaderT (Mob, Topo) (RandT StdGen IO))
+type Thoughtful memtype = StateT memtype (ReaderT (Actor, Topo) (RandT StdGen IO))
 type Brain memtype = Thoughtful memtype Command
 
 zombieBrain :: Brain ()
@@ -71,7 +70,7 @@ zombieBrain = Move <$> randomDirection
 zmap :: (a -> b) -> [a] -> [(a, b)]
 zmap f xs = zip xs (fmap f xs)
 
-tickPlayer :: Player -> Ticker Player
+tickPlayer :: Actor -> Ticker Actor
 tickPlayer =  pure . over hunger succ
           >=> pure . over fatigue succ
 
@@ -89,36 +88,30 @@ canPerformCommand actor (Move dir) world =
     worldTopo = world ^. topo
     destination = move dir (actor ^. location)
 
-survey :: [Identified Mob] -> [(Id, Mob, Brain ())]
-survey mobs = rearrange <$> zmap (const zombieBrain) mobs
+survey :: [(Id, Actor)] -> [(Id, Actor, Brain ())]
+survey actors = rearrange <$> zmap (const zombieBrain) actors
   where
     rearrange :: ((a, b), c) -> (a, b, c)
     rearrange ((x, y), z) = (x, y, z)
 
-mobWithId :: Id -> Traversal World World Mob Mob
-mobWithId id = mobs.traverse.filtered (hasId id)._2
-
-performMobCommandIfPossible :: (Id, Command) -> World -> World
-performMobCommandIfPossible (id, command) world =
-  if canPerformCommand mob command world then
-    performMobCommand (id, command) world
+performCommandIfPossible :: (Id, Command) -> World -> World
+performCommandIfPossible (id, command) world =
+  if canPerformCommand actor command world then
+    performCommand (id, command) world
   else
     world
-  where mob = world ^?! mobWithId id
+  where actor = world ^. actorWithId id
 
-performMobCommand :: (Id, Command) -> World -> World
-performMobCommand (id, (Move dir)) =
-  over (mobWithId id.location) (move dir)
+performCommand :: (Id, Command) -> World -> World
+performCommand (id, (Move dir)) =
+  over (actorWithId id.location) (move dir)
 
-performCommand :: Command -> World -> World
-performCommand (Move dir) = over (player.location) (move dir)
-
-makeShadowTopo :: Player -> Topo -> ShadowTopo
-makeShadowTopo player topo = translateTopo playerPosition clampedShadowTopo
+makeShadowTopo :: Actor -> Topo -> ShadowTopo
+makeShadowTopo actor topo = translateTopo actorPosition clampedShadowTopo
   where
-    playerPosition = player ^. location
-    viewDistance = player ^. sightRadius
-    obstructionTopo = makeObstructionTopo playerPosition viewDistance topo
+    actorPosition = actor ^. location
+    viewDistance = actor ^. sightRadius
+    obstructionTopo = makeObstructionTopo actorPosition viewDistance topo
     shadowTopo = fieldOfView obstructionTopo
     clampedShadowTopo = mapArray (clampCircle viewDistance) shadowTopo
 

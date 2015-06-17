@@ -61,12 +61,6 @@ randomDirection = do
 tickActor :: Actor -> Ticker Actor
 tickActor = pure
 
-type Thoughtful memtype = StateT memtype (ReaderT (Actor, Topo) (RandT StdGen IO))
-type Brain memtype = Thoughtful memtype Command
-
-zombieBrain :: Brain ()
-zombieBrain = Move <$> randomDirection
-
 zmap :: (a -> b) -> [a] -> [(a, b)]
 zmap f xs = zip xs (fmap f xs)
 
@@ -87,12 +81,6 @@ canPerformCommand actor (Move dir) world =
   where
     worldTopo = world ^. topo
     destination = move dir (actor ^. location)
-
-survey :: [(Id, Actor)] -> [(Id, Actor, Brain ())]
-survey actors = rearrange <$> zmap (const zombieBrain) actors
-  where
-    rearrange :: ((a, b), c) -> (a, b, c)
-    rearrange ((x, y), z) = (x, y, z)
 
 performCommandIfPossible :: (Id, Command) -> World -> World
 performCommandIfPossible (id, command) world =

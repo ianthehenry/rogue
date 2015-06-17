@@ -7,11 +7,13 @@
 module UI (play) where
 
 import Graphics.Vty
+import Data.Map (Map)
 import RoguePrelude
 import Types
 import Logic
 import System.Random
 import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.Either
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Random
@@ -22,56 +24,81 @@ data Action = ActionCommand Command
             | ActionMenu MenuPage
             | ActionQuit
 
+data MetaCommand = MetaQuit | MetaSave | MetaLoad
+
 data MenuPage = MenuInventory
 
-data GameState = GameState { _gameStateMenuPage :: Maybe MenuPage
-                           , _gameStateWorld :: World
-                           }
+data GameState = GameState { _gameStateMenuPage :: Maybe MenuPage }
 $(makeFields ''GameState)
 
-think :: memtype -> Actor -> Topo -> Thoughtful memtype a -> IO a
-think mem actor topo brain = do
-  gen <- getStdGen
-  let readerPart = evalStateT brain mem
-      randomPart = runReaderT readerPart (actor, topo)
-  evalRandT randomPart gen
-
-step :: ReaderT Vty (MaybeT (StateT GameState IO)) ()
-step = do
-  vty <- ask
-  w <- view world <$> get
-  liftIO (updateDisplay vty w)
-  maybeAction <- parseEvent <$> liftIO (nextEvent vty)
-  maybe (pure ()) (lift . interpretAction) maybeAction
-
-interpretAction :: Action -> MaybeT (StateT GameState IO) ()
-interpretAction ActionQuit = mzero
-interpretAction (ActionMenu page) = menuPage .= Just page
-interpretAction (ActionCommand c) = do
-  w <- use world
-  when (canPerformCommand (w ^. player) c w) $ do
-    -- tail is the extremely gross way to exclude the player's "brain"
-    let brains = tail $ survey (w ^. actors.to itoList)
-
-    worldSteppers <- for brains $ \(id, actor, brain) -> do
-      command <- liftIO (think () actor (w ^. topo) brain)
-      pure (performCommandIfPossible (id, command))
-
-    world %= performCommand (0, c)
-    world %= runAll worldSteppers
-    world %=! evalRandIO . tick
-
-infix 4 %=!
-
-(%=!) :: (MonadIO m, MonadState t m) => Lens' t a -> (a -> IO a) -> m ()
-lens %=! f = do
-  s <- use lens
+modifio :: (MonadIO m, MonadState a m) => (a -> IO a) -> m ()
+modifio f = do
+  s <- get
   s' <- liftIO (f s)
-  lens .= s'
+  put s'
+
+tupling :: (a -> b) -> a -> (a, b)
+tupling f a = (a, f a)
+
+getCommands :: Vty -> World -> EitherT MetaCommand IO [(Id, Command)]
+getCommands vty world = do
+  let brains = (traverse._2 %~ tupling getBrain) (world ^. actors.to itoList)
+  for brains $ \(id, (actor, brain)) -> do
+    command <- think vty world actor brain
+    pure (id, command)
 
 play :: Vty -> World -> IO ()
-play vty w = evalStateT (runMaybeT_ (runReaderT (forever step) vty)) gameState
-  where gameState = GameState Nothing w
+play vty w = evalStateT (runMaybeT_ (runReaderT (forever step) vty)) w
+
+step :: ReaderT Vty (MaybeT (StateT World IO)) ()
+step = do
+  vty <- ask
+  w <- get
+  todo <- (liftIO . runEitherT) (getCommands vty w)
+  case todo of
+    Left MetaQuit -> mzero
+    Right commands -> do
+      let worldSteppers = performCommandIfPossible <$> commands
+
+      modify (runAll worldSteppers)
+      modifio (evalRandIO . tick)
+
+zombieBrain :: MobBrain
+zombieBrain = Move <$> randomDirection
+
+playerBrain :: PlayerBrain
+playerBrain = do
+  (vty, w) <- ask
+  liftIO (updateDisplay vty w)
+  maybeAction <- parseEvent <$> liftIO (nextEvent vty)
+  case maybeAction of
+    Nothing -> playerBrain
+    Just a -> do
+      maybeCommand <- (lift . interpretAction) a
+      maybe playerBrain pure maybeCommand
+
+interpretAction :: Action -> StateT GameState (EitherT MetaCommand IO) (Maybe Command)
+interpretAction ActionQuit = lift (left MetaQuit)
+interpretAction (ActionMenu page) = (menuPage .= Just page) $> Nothing
+interpretAction (ActionCommand c) = pure (Just c)
+
+type PlayerBrain = ReaderT (Vty, World) (StateT GameState (EitherT MetaCommand IO)) Command
+type MobBrain = ReaderT World (StateT Coord (Rand StdGen)) Command
+data Brain = Player PlayerBrain | Mob MobBrain
+
+think :: Vty -> World -> Actor -> Brain -> EitherT MetaCommand IO Command
+think vty world actor (Player brain) = do
+  let brain' = runReaderT brain (vty, world)
+  evalStateT brain' undefined
+think vty world actor (Mob brain) = do
+  let brain' = runReaderT brain world
+  let brain'' = evalStateT brain' undefined
+  liftIO (evalRandIO brain'')
+
+getBrain :: Actor -> Brain
+getBrain actor = case (actor ^. species) of
+  Human -> Player playerBrain
+  Zombie -> Mob zombieBrain
 
 runMaybeT_ :: Monad m => MaybeT m a -> m ()
 runMaybeT_ m = runMaybeT m $> ()

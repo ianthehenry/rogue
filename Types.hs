@@ -25,11 +25,16 @@ data Tile = Grass | Tree | Rock deriving (Show, Eq)
 
 data Species = Human | Zombie
 
+data Memory = Pursuing Coord
+            | Wandering
+            | Usering
+
 data Actor = Actor { _actorLocation :: Coord
                    , _actorSightRadius :: Int
                    , _actorHunger :: Int
                    , _actorFatigue :: Int
                    , _actorSpecies :: Species
+                   , _actorMemory :: Memory
                    }
 $(makeFields ''Actor)
 

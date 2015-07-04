@@ -42,9 +42,8 @@ tupling f a = (a, f a)
 
 getCommands :: Vty -> World -> EitherT MetaCommand IO [(Id, Command)]
 getCommands vty world = do
-  let brains = (traverse._2 %~ tupling getBrain) (world ^. actors.to itoList)
-  for brains $ \(id, (actor, brain)) -> do
-    command <- think vty world actor brain
+  for (world ^. actors.to itoList) $ \(id, actor) -> do
+    command <- think vty world actor
     pure (id, command)
 
 play :: Vty -> World -> IO ()
@@ -86,19 +85,16 @@ type PlayerBrain = ReaderT (Vty, World) (StateT GameState (EitherT MetaCommand I
 type MobBrain = ReaderT World (StateT Coord (Rand StdGen)) Command
 data Brain = Player PlayerBrain | Mob MobBrain
 
-think :: Vty -> World -> Actor -> Brain -> EitherT MetaCommand IO Command
-think vty world actor (Player brain) = do
+think :: Vty -> World -> Actor -> EitherT MetaCommand IO Command
+think vty world (view memory -> Usering) = do
   let brain' = runReaderT brain (vty, world)
   evalStateT brain' undefined
-think vty world actor (Mob brain) = do
+  where brain = playerBrain
+think vty world (view memory -> Wandering) = do
   let brain' = runReaderT brain world
   let brain'' = evalStateT brain' undefined
   liftIO (evalRandIO brain'')
-
-getBrain :: Actor -> Brain
-getBrain actor = case (actor ^. species) of
-  Human -> Player playerBrain
-  Zombie -> Mob zombieBrain
+  where brain = zombieBrain
 
 runMaybeT_ :: Monad m => MaybeT m a -> m ()
 runMaybeT_ m = runMaybeT m $> ()

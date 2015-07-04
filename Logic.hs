@@ -29,7 +29,7 @@ interpretHunger n
   | n > 6 * 30   = Fine
   | otherwise    = Full
   where
-    hours = (6 * 60 *)
+    hours = (6 * 60 * 10 *)
 
 interpretFatigue :: Int -> FatigueInterpretation
 interpretFatigue n
@@ -40,7 +40,7 @@ interpretFatigue n
   | n > hours 1  = Awake
   | otherwise    = Spritely
   where
-    hours = (6 * 60 *)
+    hours = (6 * 60 * 10 *)
 
 type Ticker a = forall m. MonadRandom m => m a
 

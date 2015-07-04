@@ -166,7 +166,7 @@ worldInfo world _ = string defAttr time
   where
     ticks = world ^. turn
     time = hour <> ":" <> minute <> " " <> meridiem
-    minutes = ticks `div` 6
+    minutes = ticks `div` 60
     minute = twoDigit (minutes `mod` 60)
     hours = minutes `div` 60
 

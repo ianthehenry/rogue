@@ -14,8 +14,10 @@ main = do
   play vty (makeWorld topo (player:mobs))
   shutdown vty
   where
-    player = Actor (5, 5) 25 0 0 Human Usering 0
-    mobs = [Actor (10, 10) 5 0 0 Zombie Wandering 1]
+    player = Actor (5, 5) 25 0 0 Human Usering 0 10
+    mobs = [ Actor (10, 10) 5 0 0 Zombie Wandering 1 4
+           , Actor (15, 15) 5 0 0 Zombie Wandering 5 12
+           ]
 
 randomTopo :: IO Topo
 randomTopo = do

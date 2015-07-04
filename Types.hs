@@ -35,6 +35,7 @@ data Actor = Actor { _actorLocation :: Coord
                    , _actorFatigue :: Int
                    , _actorSpecies :: Species
                    , _actorMemory :: Memory
+                   , _actorNextTurn :: Int
                    }
 $(makeFields ''Actor)
 

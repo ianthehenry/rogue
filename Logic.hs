@@ -92,7 +92,13 @@ performCommandIfPossible (id, command) world =
 
 performCommand :: (Id, Command) -> World -> World
 performCommand (id, (Move dir)) =
-  over (actorWithId id.location) (move dir)
+  ( change location (move dir)
+  . change nextTurn (+ 10)
+  ) world
+  where
+    actor :: Lens' World Actor
+    actor = actorWithId id
+    change lens = over (actor.lens)
 
 makeShadowTopo :: Actor -> Topo -> ShadowTopo
 makeShadowTopo actor topo = translateTopo actorPosition clampedShadowTopo

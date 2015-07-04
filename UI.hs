@@ -37,15 +37,6 @@ modifio f = do
   s' <- liftIO (f s)
   put s'
 
-tupling :: (a -> b) -> a -> (a, b)
-tupling f a = (a, f a)
-
-getCommands :: Vty -> World -> EitherT MetaCommand IO [(Id, Command)]
-getCommands vty world = do
-  for (world ^. actors.to itoList) $ \(id, actor) -> do
-    command <- think vty world actor
-    pure (id, command)
-
 play :: Vty -> World -> IO ()
 play vty w = evalStateT (runMaybeT_ (runReaderT (forever step) vty)) w
 
@@ -53,14 +44,29 @@ step :: ReaderT Vty (MaybeT (StateT World IO)) ()
 step = do
   vty <- ask
   w <- get
-  todo <- (liftIO . runEitherT) (getCommands vty w)
-  case todo of
-    Left MetaQuit -> mzero
-    Right commands -> do
-      let worldSteppers = performCommandIfPossible <$> commands
+  todoNext <- (liftIO . runMaybeT) (runEitherT (runReaderT (nextCommand w) vty))
+  case todoNext of
+    Nothing -> modifio (evalRandIO . tick)
+    Just (Left MetaQuit) -> mzero
+    Just (Right command) -> modify (performCommandIfPossible command)
 
-      modify (runAll worldSteppers)
-      modifio (evalRandIO . tick)
+nextCommand :: World -> ReaderT Vty (EitherT MetaCommand (MaybeT IO)) (Id, Command)
+nextCommand w = do
+  (id, actor) <- (lift . lift . liftMaybe) (nextActor w)
+  vty <- ask
+  command <- (lift . massage) (think vty w actor)
+  pure (id, command)
+
+massage :: EitherT a IO b -> EitherT a (MaybeT IO) b
+massage = hoistEither <=< liftIO . runEitherT
+
+nextActor :: World -> Maybe (Id, Actor)
+nextActor w = ifind canAct (w ^. actors)
+  where canAct _ actor = actor ^. nextTurn == w ^. turn
+
+liftMaybe :: Monad m => Maybe a -> MaybeT m a
+liftMaybe (Just x) = pure x
+liftMaybe Nothing = mzero
 
 zombieBrain :: MobBrain
 zombieBrain = Move <$> randomDirection

@@ -57,11 +57,13 @@ step :: ReaderT Frontend (MaybeT (StateT World IO)) ()
 step = do
   frontend <- ask
   w <- get
+  liftIO (updateDisplay (fst frontend) w)
   todoNext <- (liftIO . runMaybeT) (runEitherT (runReaderT (nextCommand w) frontend))
   case todoNext of
-    Nothing -> modifio (evalRandIO . tick)
+    Nothing -> do { modifio (evalRandIO . tick) ; sleep 10 }
     Just (Left MetaQuit) -> mzero
     Just (Right command) -> modify (performCommandIfPossible command)
+  where sleep n = liftIO (threadDelay (n * 1000))
 
 nextCommand :: World -> ReaderT Frontend (EitherT MetaCommand (MaybeT IO)) (Id, Command)
 nextCommand w = do

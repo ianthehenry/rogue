@@ -37,20 +37,33 @@ modifio f = do
   s' <- liftIO (f s)
   put s'
 
-play :: Vty -> World -> IO ()
-play vty w = evalStateT (runMaybeT_ (runReaderT (forever step) vty)) w
+type Frontend = (Vty, MVar Event)
 
-step :: ReaderT Vty (MaybeT (StateT World IO)) ()
+play :: Vty -> World -> IO ()
+play vty w = do
+  keyBuffer <- newEmptyMVar
+  let frontend = (vty, keyBuffer)
+  readThread <- forkIO (syncKey frontend)
+  evalStateT (runMaybeT_ (runReaderT (forever step) frontend)) w
+  killThread readThread
+
+syncKey :: Frontend -> IO ()
+syncKey (vty, keyBuffer) = forever $ do
+  key <- nextEvent vty
+  tryTakeMVar keyBuffer
+  putMVar keyBuffer key
+
+step :: ReaderT Frontend (MaybeT (StateT World IO)) ()
 step = do
-  vty <- ask
+  frontend <- ask
   w <- get
-  todoNext <- (liftIO . runMaybeT) (runEitherT (runReaderT (nextCommand w) vty))
+  todoNext <- (liftIO . runMaybeT) (runEitherT (runReaderT (nextCommand w) frontend))
   case todoNext of
     Nothing -> modifio (evalRandIO . tick)
     Just (Left MetaQuit) -> mzero
     Just (Right command) -> modify (performCommandIfPossible command)
 
-nextCommand :: World -> ReaderT Vty (EitherT MetaCommand (MaybeT IO)) (Id, Command)
+nextCommand :: World -> ReaderT Frontend (EitherT MetaCommand (MaybeT IO)) (Id, Command)
 nextCommand w = do
   (id, actor) <- (lift . lift . liftMaybe) (nextActor w)
   vty <- ask
@@ -73,9 +86,9 @@ zombieBrain = Move <$> randomDirection
 
 playerBrain :: PlayerBrain
 playerBrain = do
-  (vty, w) <- ask
+  ((vty, keyBuffer), w) <- ask
   liftIO (updateDisplay vty w)
-  maybeAction <- parseEvent <$> liftIO (nextEvent vty)
+  maybeAction <- parseEvent <$> liftIO (takeMVar keyBuffer)
   case maybeAction of
     Nothing -> playerBrain
     Just a -> do
@@ -87,11 +100,11 @@ interpretAction ActionQuit = lift (left MetaQuit)
 interpretAction (ActionMenu page) = (menuPage .= Just page) $> Nothing
 interpretAction (ActionCommand c) = pure (Just c)
 
-type PlayerBrain = ReaderT (Vty, World) (StateT GameState (EitherT MetaCommand IO)) Command
+type PlayerBrain = ReaderT (Frontend, World) (StateT GameState (EitherT MetaCommand IO)) Command
 type MobBrain = ReaderT World (StateT Coord (Rand StdGen)) Command
 data Brain = Player PlayerBrain | Mob MobBrain
 
-think :: Vty -> World -> Actor -> EitherT MetaCommand IO Command
+think :: Frontend -> World -> Actor -> EitherT MetaCommand IO Command
 think vty world (view memory -> Usering) = do
   let brain' = runReaderT brain (vty, world)
   evalStateT brain' undefined

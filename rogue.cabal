@@ -8,6 +8,7 @@ cabal-version:       >=1.10
 
 executable rogue
   main-is:             Main.hs
+  hs-source-dirs:      src/
   ghc-options:         -threaded
   default-extensions:  NoImplicitPrelude, TupleSections, FlexibleContexts, ViewPatterns
   build-depends:       base ==4.*, base-prelude
